@@ -11,56 +11,7 @@ The app has two independent operational modes that share the same ViewModel laye
 1. **Manual mode** — user opens the app, scans SMS inbox by date range, reviews parsed transactions, enriches them with Firefly metadata, and submits
 2. **Live mode** — a background `BroadcastReceiver` intercepts every incoming SMS, parses it on the spot, and notifies the user without the app being open
 
-```mermaid
-graph TB
-    subgraph DEVICE["📱 Android Device"]
-        subgraph LIVE["Live Mode (Background)"]
-            SMS_IN["📩 Incoming SMS"] --> RECV["SmsReceiver\n(BroadcastReceiver)"]
-            RECV --> PARSER["SmsParser"]
-            PARSER --> NOTIF["NotificationHelper"]
-            NOTIF --> NOTIF_UI["🔔 Notification\n(Send Now / Review)"]
-        end
-
-        subgraph APP["App (Foreground)"]
-            subgraph UI_LAYER["UI Layer (Jetpack Compose)"]
-                SETUP["SetupScreen"]
-                SMS_LIST["SmsListScreen"]
-                TXN["TransactionScreen"]
-                DEBUG["DebugScreen"]
-            end
-
-            subgraph VM_LAYER["ViewModel Layer"]
-                SETUP_VM["SetupViewModel"]
-                SMS_VM["SmsViewModel"]
-                TXN_VM["TransactionViewModel"]
-                DATA_VM["FireflyDataViewModel"]
-            end
-
-            subgraph DATA_LAYER["Data Layer"]
-                SMS_READER["SmsReader"]
-                RETROFIT["RetrofitClient\n+ FireflyApi"]
-                PREFS["AppPrefs\n(SharedPreferences)"]
-                DBG["DebugLog"]
-            end
-        end
-
-        subgraph FIREFLY["☁️ Firefly III Instance"]
-            API["REST API\n/api/v1/..."]
-        end
-    end
-
-    NOTIF_UI -- "Tap: Review" --> APP
-    NOTIF_UI -- "Tap: Send Now" --> RECV
-    RECV -- "goAsync + coroutine" --> RETROFIT
-
-    UI_LAYER <--> VM_LAYER
-    VM_LAYER --> DATA_LAYER
-    DATA_LAYER --> RETROFIT
-    RETROFIT --> API
-    SMS_READER --> SMS_LIST
-    PREFS --> SETUP_VM
-    DBG --> DEBUG
-```
+![Big Picture — System Topology](Diagrams/Architecture_01.png)
 
 ---
 
@@ -68,38 +19,7 @@ graph TB
 
 The project follows **MVVM (Model-View-ViewModel)** strictly. Here's what each layer is and is not allowed to do:
 
-```mermaid
-graph LR
-    subgraph VIEW["View Layer\n(Compose UI)"]
-        direction TB
-        V1["SetupScreen.kt"]
-        V2["SmsListScreen.kt"]
-        V3["TransactionScreen.kt"]
-        V4["DebugScreen.kt"]
-    end
-
-    subgraph VIEWMODEL["ViewModel Layer"]
-        direction TB
-        VM1["SetupViewModel"]
-        VM2["SmsViewModel"]
-        VM3["TransactionViewModel"]
-        VM4["FireflyDataViewModel"]
-    end
-
-    subgraph MODEL["Model / Data Layer"]
-        direction TB
-        M1["ParsedTransaction\nSmsMessage\nFireflyModels"]
-        M2["SmsReader"]
-        M3["SmsParser"]
-        M4["RetrofitClient\nFireflyApi"]
-        M5["AppPrefs"]
-        M6["DebugLog"]
-    end
-
-    VIEW -- "reads state\ncalls functions" --> VIEWMODEL
-    VIEWMODEL -- "launches coroutines\nreads/writes" --> MODEL
-    VIEW -. "❌ never directly\naccesses" .-> MODEL
-```
+![Layered Architecture — MVVM](Diagrams/Architecture_02.png)
 
 ### Rules enforced in this codebase
 
@@ -136,22 +56,7 @@ The custom `Application` subclass is registered in `AndroidManifest.xml` via `an
 
 The app uses **Navigation Compose** with a single bottom navigation bar. Screens are simple destinations — no nested graphs, no deep links (except from the notification).
 
-```mermaid
-stateDiagram-v2
-    [*] --> Setup : App launch (first run)
-    Setup --> SmsList : Bottom bar
-    SmsList --> Transactions : "Parse & View →" button
-    Transactions --> SmsList : Bottom bar
-    Setup --> Debug : Bottom bar
-    SmsList --> Debug : Bottom bar
-    Transactions --> Debug : Bottom bar
-
-    note right of Transactions
-        Also reached directly
-        by tapping a notification
-        (skips SMS scan step)
-    end note
-```
+![Screen Navigation — State Diagram](Diagrams/Architecture_03.png)
 
 ### Notification → App Navigation
 
@@ -171,49 +76,13 @@ This approach avoids any singleton, static variable, or `Intent` passing to a Vi
 
 All ViewModels are created by `viewModel()` in `MainApp()`, which means they're scoped to the **Activity** lifecycle. This is intentional — the same `SmsViewModel` instance is shared across the SMS tab and Transaction tab, so parsed transactions persist through tab navigation.
 
-```mermaid
-graph TD
-    ACT["MainActivity\n(Activity scope)"] --> MAINAPP["MainApp()\nComposable"]
-    MAINAPP --> SVM["SmsViewModel\n(shared)"]
-    MAINAPP --> TVM["TransactionViewModel\n(shared)"]
-    MAINAPP --> STVM["SetupViewModel\n(shared)"]
-    MAINAPP --> FDVM["FireflyDataViewModel\n(shared)"]
-
-    MAINAPP --> SETUP_SCR["SetupScreen\nreads: SetupViewModel"]
-    MAINAPP --> SMS_SCR["SmsListScreen\nreads: SmsViewModel"]
-    MAINAPP --> TXN_SCR["TransactionScreen\nreads: SmsViewModel\n        TransactionViewModel\n        FireflyDataViewModel"]
-    MAINAPP --> DBG_SCR["DebugScreen\nreads: DebugLog (singleton)"]
-```
+![ViewModel Ownership](Diagrams/Architecture_04.png)
 
 ---
 
 ## Dependency Graph (simplified)
 
-```mermaid
-graph LR
-    SmsReceiver --> SmsParser
-    SmsReceiver --> NotificationHelper
-    SmsReceiver --> RetrofitClient
-    SmsReceiver --> AppPrefs
-
-    SetupViewModel --> RetrofitClient
-    SetupViewModel --> AppPrefs
-
-    SmsViewModel --> SmsReader
-    SmsViewModel --> SmsParser
-
-    TransactionViewModel --> RetrofitClient
-    TransactionViewModel --> AppPrefs
-
-    FireflyDataViewModel --> RetrofitClient
-    FireflyDataViewModel --> AppPrefs
-
-    RetrofitClient --> FireflyApi
-    RetrofitClient --> DebugLog
-
-    SmsParser --> DebugLog
-    SmsReader --> DebugLog
-```
+![Dependency Graph](Diagrams/Architecture_05_dependancy.png)
 
 All network calls go through `RetrofitClient.create()`. It is **not** a singleton — it's recreated on demand with the current `baseUrl` and `accessToken` from `AppPrefs`. This means config changes take effect immediately without restarting.
 

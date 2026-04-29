@@ -28,18 +28,7 @@ These headers are injected automatically by the `authInterceptor` in `RetrofitCl
 
 ## HTTP Client Architecture
 
-```mermaid
-graph LR
-    APP["ViewModel / SmsReceiver"] -->|"calls"| RC["RetrofitClient.create(url, token)"]
-    RC --> RETROFIT["Retrofit instance"]
-    RETROFIT --> OKHTTP["OkHttpClient"]
-    OKHTTP --> I1["authInterceptor\n(adds headers)"]
-    OKHTTP --> I2["responseLogInterceptor\n(peeks response body)"]
-    OKHTTP --> I3["HttpLoggingInterceptor\n(logs full body)"]
-    I1 --> NET["Network →\nFirefly III"]
-    I2 --> DBG["DebugLog\n(visible in Debug tab)"]
-    I3 --> DBG
-```
+![HTTP Client Architecture — OkHttp Interceptor Chain](Diagrams/FireFly_integration_01.png)
 
 ### Interceptor Order Matters
 
@@ -249,12 +238,7 @@ This is the most important endpoint. It creates a new transaction in Firefly III
 
 **Source/Destination logic:**
 
-```mermaid
-flowchart LR
-    TYPE{fireflyType}
-    TYPE -->|"withdrawal"| WD["source_id = assetAccountId\ndestination_id = selected OR null\ndestination_name = 'SMS Expense' if no ID"]
-    TYPE -->|"deposit"| DEP["destination_id = assetAccountId\nsource_id = selected OR null\nsource_name = 'SMS Income' if no ID"]
-```
+![Source/Destination Logic by Transaction Type](Diagrams/FireFly_integration_02.png)
 
 **Successful response:**
 ```json

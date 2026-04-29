@@ -17,34 +17,7 @@ Android development has strict threading rules. This document explains every thr
 
 ## Thread Zones
 
-```mermaid
-graph LR
-    subgraph MAIN["Main Thread (UI Thread)"]
-        direction TB
-        COMPOSE["Compose recomposition"]
-        VM_STATE["ViewModel mutableStateOf writes"]
-        HANDLER["Handler.post() callbacks"]
-        MAIN_LAUNCH["viewModelScope.launch {}"]
-    end
-
-    subgraph IO["IO Thread (Dispatchers.IO)"]
-        direction TB
-        NETWORK["RetrofitClient API calls"]
-        SMS_READ["ContentResolver queries\n(SmsReader)"]
-        RECV_ASYNC["SmsReceiver.goAsync() coroutine"]
-    end
-
-    subgraph OKHTTP["OkHttp Thread Pool"]
-        direction TB
-        INTERCEPTORS["Interceptors\n(authInterceptor, responseLogInterceptor)"]
-        LOG_INTERCEPT["HttpLoggingInterceptor"]
-    end
-
-    MAIN_LAUNCH --> IO
-    INTERCEPTORS --> OKHTTP
-    OKHTTP -->|"DebugLog.log() calls"| HANDLER
-    HANDLER -->|"posts to"| MAIN
-```
+![Thread Zones — Main Thread, IO Thread, OkHttp Pool](Diagrams/Threding_01.png)
 
 ---
 
