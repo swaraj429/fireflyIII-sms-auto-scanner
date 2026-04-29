@@ -21,8 +21,8 @@ The receiver handles **three distinct actions**:
 | `intent.action` | Triggered when |
 |---|---|
 | `android.provider.Telephony.SMS_RECEIVED` | Any SMS arrives on the device |
-| `com.swaraj.fireflysmscanner.ACTION_SEND_NOW` | User taps "⚡ Send to Firefly" on a notification |
-| `com.swaraj.fireflysmscanner.ACTION_DISMISS` | User taps "✋ Dismiss" on a notification |
+| `com.swaraj429.firefly3smsscanner.ACTION_SEND_NOW` | User taps "⚡ Send to Firefly" on a notification |
+| `com.swaraj429.firefly3smsscanner.ACTION_DISMISS` | User taps "✋ Dismiss" on a notification |
 
 ---
 

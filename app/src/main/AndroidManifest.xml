@@ -47,11 +47,11 @@
             </intent-filter>
             <!-- Notification action: Send Now -->
             <intent-filter>
-                <action android:name="com.swaraj.fireflysmscanner.ACTION_SEND_NOW" />
+                <action android:name="com.swaraj429.firefly3smsscanner.ACTION_SEND_NOW" />
             </intent-filter>
             <!-- Notification action: Dismiss -->
             <intent-filter>
-                <action android:name="com.swaraj.fireflysmscanner.ACTION_DISMISS" />
+                <action android:name="com.swaraj429.firefly3smsscanner.ACTION_DISMISS" />
             </intent-filter>
         </receiver>
 

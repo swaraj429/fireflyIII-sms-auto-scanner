@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.swaraj.fireflysmscanner"
+    namespace = "com.swaraj429.firefly3smsscanner"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.swaraj.fireflysmscanner"
+        applicationId = "com.swaraj429.firefly3smsscanner"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
