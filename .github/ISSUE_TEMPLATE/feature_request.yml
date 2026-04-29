@@ -1,0 +1,66 @@
+name: "💡 Feature Request"
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Got an idea to make this better? We'd love to hear it!
+        Please check [existing feature requests](https://github.com/swaraj429/firefly-3-sms-auto-scanner/issues?q=is%3Aissue+label%3Aenhancement) first.
+
+  - type: checkboxes
+    id: existing_issues
+    attributes:
+      label: Pre-flight check
+      options:
+        - label: I have searched existing issues and feature requests
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area does this relate to?
+      options:
+        - SMS Parsing (new bank format)
+        - Notifications
+        - Transaction Editor (category / tags / budget)
+        - Firefly III API integration
+        - UI / UX
+        - Performance
+        - Privacy / Security
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case. "As a user, I want to..."
+      placeholder: "As a user, I want to automatically assign categories based on the merchant name so that I don't have to manually select a category for every Swiggy order."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How do you imagine this working?
+      placeholder: "A rules screen where I can define: if SMS contains 'SWIGGY' → set category to 'Food & Dining' automatically."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      placeholder: "I could manually select the category each time, but with 20+ Swiggy orders a month this is tedious."
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Mockups, links to similar features in other apps, Firefly III API docs links...

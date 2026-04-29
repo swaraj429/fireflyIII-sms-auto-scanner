@@ -1,0 +1,104 @@
+name: "🐛 Bug Report"
+description: Report a crash, incorrect parse, or unexpected behaviour
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a bug! Please fill out as much as you can — it helps us fix it faster.
+        **⚠️ Redact any account numbers, card numbers, or PAN from SMS samples before posting.**
+
+  - type: checkboxes
+    id: existing_issues
+    attributes:
+      label: Pre-flight check
+      options:
+        - label: I have searched existing issues and this is not a duplicate
+          required: true
+        - label: I have checked the Debug tab in the app for relevant log entries
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: "When I tap 'Test Connection', the app crashes with no error message..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      placeholder: "The connection test should show a ✅ or ❌ status message."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to Setup tab
+        2. Enter a valid URL and token
+        3. Tap 'Test Connection'
+        4. App crashes
+    validations:
+      required: true
+
+  - type: textarea
+    id: sms_sample
+    attributes:
+      label: SMS text (if parse-related)
+      description: Paste the raw SMS text. **Replace account/card numbers with XXXX.**
+      placeholder: |
+        From: AD-HDFCBK
+        "INR 2,500.00 debited from a/c **XXXX on 29-Apr-25. Avl Bal: INR 12,345.00"
+      render: text
+
+  - type: textarea
+    id: debug_log
+    attributes:
+      label: Debug log output
+      description: Go to the Debug tab in the app, tap Share/Copy, and paste here.
+      render: text
+
+  - type: input
+    id: android_version
+    attributes:
+      label: Android version
+      placeholder: "e.g. Android 14 (API 34)"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device / ROM
+      placeholder: "e.g. Samsung Galaxy S23 / One UI 6.1"
+    validations:
+      required: true
+
+  - type: input
+    id: app_version
+    attributes:
+      label: App version
+      placeholder: "e.g. 1.0-debug or git commit hash"
+    validations:
+      required: true
+
+  - type: input
+    id: firefly_version
+    attributes:
+      label: Firefly III version
+      placeholder: "e.g. 6.1.13"
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, logcat output, related issues...

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Ask a Question / Start a Discussion
+    url: https://github.com/swaraj429/firefly-3-sms-auto-scanner/discussions
+    about: For questions, ideas, and general chat — use Discussions instead of Issues.
+  - name: 🔥 Firefly III Help
+    url: https://github.com/firefly-iii/firefly-iii/discussions
+    about: Questions about Firefly III itself (not this app) belong here.

@@ -1,0 +1,84 @@
+name: "🏦 New Bank SMS Format"
+description: Add support for a bank/payment SMS format that isn't currently parsed correctly
+title: "[Parser]: "
+labels: ["parser", "help wanted"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us support more banks! Please provide as many real SMS examples as you can.
+        **⚠️ Replace all account numbers, card numbers, and PAN with XXXX before posting.**
+
+  - type: input
+    id: bank_name
+    attributes:
+      label: Bank / Payment provider name
+      placeholder: "e.g. Kotak Mahindra Bank, PhonePe, Paytm"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue_type
+    attributes:
+      label: What is the problem?
+      options:
+        - Amount not detected at all
+        - Amount detected incorrectly
+        - Type wrong (shows DEBIT but should be CREDIT, or vice versa)
+        - Transaction not detected (returns UNKNOWN)
+        - App crashes on this SMS
+    validations:
+      required: true
+
+  - type: textarea
+    id: sms_samples
+    attributes:
+      label: SMS samples (minimum 3)
+      description: |
+        Paste the raw SMS messages. Replace sensitive data with XXXX.
+        Include at least one DEBIT and one CREDIT example if possible.
+      placeholder: |
+        **Example 1 (Debit):**
+        From: AD-KOTAKB
+        "Rs.1,299.00 spent on Kotak Card XXXX at AMAZON on 29-Apr-25. Avl Limit: Rs.45,000.00"
+
+        **Example 2 (Credit):**
+        From: AD-KOTAKB
+        "Rs.5,000.00 refunded to Kotak Card XXXX for AMAZON order on 29-Apr-25."
+
+        **Example 3 (UPI):**
+        From: AD-KOTAKB
+        "Rs.250.00 debited from Kotak A/c XXXX via UPI to merchant@upi on 29-Apr-25. Ref: 123456789"
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_parse
+    attributes:
+      label: Expected parse result
+      placeholder: |
+        Example 1 → Amount: 1299.00, Type: DEBIT
+        Example 2 → Amount: 5000.00, Type: CREDIT
+        Example 3 → Amount: 250.00, Type: DEBIT
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_parse
+    attributes:
+      label: What does the app currently parse it as?
+      description: Check the Debug tab after scanning — it shows the parse attempt for each SMS.
+      placeholder: |
+        Example 1 → No amount found, skipped
+        Example 2 → Amount: 5000.00, Type: UNKNOWN (keyword not matched)
+
+  - type: checkboxes
+    id: willing_to_pr
+    attributes:
+      label: Are you willing to submit a PR for this?
+      options:
+        - label: Yes, I'd like to implement this fix myself (see CONTRIBUTING.md for guidance)
+        - label: No, I'm just reporting — happy for someone else to fix it
