@@ -10,13 +10,22 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -27,7 +36,9 @@ import com.swaraj429.firefly3smsscanner.debug.DebugLog
 import com.swaraj429.firefly3smsscanner.model.ParsedTransaction
 import com.swaraj429.firefly3smsscanner.model.TransactionType
 import com.swaraj429.firefly3smsscanner.notification.NotificationHelper
-import com.swaraj429.firefly3smsscanner.ui.*
+import com.swaraj429.firefly3smsscanner.ui.DebugScreen
+import com.swaraj429.firefly3smsscanner.ui.screens.*
+import com.swaraj429.firefly3smsscanner.ui.theme.*
 import com.swaraj429.firefly3smsscanner.viewmodel.*
 
 class MainActivity : ComponentActivity() {
@@ -44,9 +55,7 @@ class MainActivity : ComponentActivity() {
         handleNotificationIntent(intent)
 
         setContent {
-            MaterialTheme(
-                colorScheme = dynamicColorSchemeOrDefault()
-            ) {
+            FireflyTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -93,16 +102,37 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable
-private fun dynamicColorSchemeOrDefault(): ColorScheme {
-    return MaterialTheme.colorScheme
-}
-
-sealed class Screen(val route: String, val title: String, val icon: @Composable () -> Unit) {
-    data object Setup : Screen("setup", "Setup", { Icon(Icons.Default.Settings, "Setup") })
-    data object SmsList : Screen("sms", "SMS", { Icon(Icons.Default.Sms, "SMS") })
-    data object Transactions : Screen("transactions", "Txns", { Icon(Icons.Default.Receipt, "Transactions") })
-    data object Debug : Screen("debug", "Debug", { Icon(Icons.Default.BugReport, "Debug") })
+sealed class Screen(
+    val route: String,
+    val title: String,
+    val selectedIcon: @Composable () -> Unit,
+    val unselectedIcon: @Composable () -> Unit
+) {
+    data object Home : Screen(
+        "home", "Home",
+        { Icon(Icons.Filled.Home, "Home") },
+        { Icon(Icons.Outlined.Home, "Home") }
+    )
+    data object SmsList : Screen(
+        "sms", "SMS",
+        { Icon(Icons.Filled.Sms, "SMS") },
+        { Icon(Icons.Outlined.Sms, "SMS") }
+    )
+    data object Rules : Screen(
+        "rules", "Rules",
+        { Icon(Icons.Filled.AutoAwesome, "Rules") },
+        { Icon(Icons.Outlined.AutoAwesome, "Rules") }
+    )
+    data object Settings : Screen(
+        "settings", "Settings",
+        { Icon(Icons.Filled.Settings, "Settings") },
+        { Icon(Icons.Outlined.Settings, "Settings") }
+    )
+    data object Debug : Screen(
+        "debug", "Debug",
+        { Icon(Icons.Filled.BugReport, "Debug") },
+        { Icon(Icons.Outlined.BugReport, "Debug") }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -173,16 +203,14 @@ fun MainApp(
     }
 
     // ── Handle notification tap ───────────────────────────────────────────────
-    // When a pending transaction arrives (from tapping a notification),
-    // add it to the list and navigate to the Transactions tab.
     LaunchedEffect(pendingNotificationTransaction.value) {
         val tx = pendingNotificationTransaction.value ?: return@LaunchedEffect
         pendingNotificationTransaction.value = null  // consume it
 
         smsViewModel.addTransactionFromNotification(tx)
 
-        // Navigate to Transactions tab
-        navController.navigate(Screen.Transactions.route) {
+        // Navigate to Home (Transactions) tab
+        navController.navigate(Screen.Home.route) {
             popUpTo(navController.graph.startDestinationId) { saveState = true }
             launchSingleTop = true
             restoreState = true
@@ -190,28 +218,28 @@ fun MainApp(
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    val screens = listOf(Screen.Setup, Screen.SmsList, Screen.Transactions, Screen.Debug)
+    val screens = listOf(Screen.Home, Screen.SmsList, Screen.Rules, Screen.Settings)
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text("🔥 Firefly SMS Scanner")
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            )
-        },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp
+            ) {
                 screens.forEach { screen ->
+                    val selected = currentRoute == screen.route
                     NavigationBarItem(
-                        icon = screen.icon,
-                        label = { Text(screen.title) },
-                        selected = currentRoute == screen.route,
+                        icon = { if (selected) screen.selectedIcon() else screen.unselectedIcon() },
+                        label = {
+                            Text(
+                                screen.title,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                            )
+                        },
+                        selected = selected,
                         onClick = {
                             if (currentRoute != screen.route) {
                                 navController.navigate(screen.route) {
@@ -222,7 +250,14 @@ fun MainApp(
                                     restoreState = true
                                 }
                             }
-                        }
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Primary,
+                            selectedTextColor = Primary,
+                            indicatorColor = Primary.copy(alpha = 0.1f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
                 }
             }
@@ -230,15 +265,19 @@ fun MainApp(
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Setup.route,
+            startDestination = Screen.Home.route,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable(Screen.Setup.route) {
-                SetupScreen(viewModel = setupViewModel)
+            composable(Screen.Home.route) {
+                HomeScreen(
+                    smsViewModel = smsViewModel,
+                    transactionViewModel = transactionViewModel,
+                    fireflyDataViewModel = fireflyDataViewModel
+                )
             }
 
             composable(Screen.SmsList.route) {
-                SmsListScreen(
+                SmsScreen(
                     viewModel = smsViewModel,
                     fireflyDataViewModel = fireflyDataViewModel,
                     hasPermission = hasSmsPermission,
@@ -251,17 +290,21 @@ fun MainApp(
                         )
                     },
                     onNavigateToParsed = {
-                        navController.navigate(Screen.Transactions.route)
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     }
                 )
             }
 
-            composable(Screen.Transactions.route) {
-                TransactionScreen(
-                    smsViewModel = smsViewModel,
-                    transactionViewModel = transactionViewModel,
-                    fireflyDataViewModel = fireflyDataViewModel
-                )
+            composable(Screen.Rules.route) {
+                RulesScreen()
+            }
+
+            composable(Screen.Settings.route) {
+                SettingsScreen(viewModel = setupViewModel)
             }
 
             composable(Screen.Debug.route) {
