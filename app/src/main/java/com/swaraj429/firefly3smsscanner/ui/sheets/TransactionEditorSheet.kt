@@ -49,14 +49,16 @@ fun TransactionEditorSheet(
     var selectedSourceAccount by remember(transaction) {
         mutableStateOf(
             if (transaction.sourceAccountId != null) {
-                fireflyData.assetAccounts.find { it.id == transaction.sourceAccountId }
+                (fireflyData.assetAccounts + fireflyData.revenueAccounts + fireflyData.expenseAccounts)
+                    .find { it.id == transaction.sourceAccountId }
             } else null
         )
     }
     var selectedDestAccount by remember(transaction) {
         mutableStateOf(
             if (transaction.destinationAccountId != null) {
-                (fireflyData.expenseAccounts + fireflyData.assetAccounts).find { it.id == transaction.destinationAccountId }
+                (fireflyData.expenseAccounts + fireflyData.assetAccounts + fireflyData.revenueAccounts)
+                    .find { it.id == transaction.destinationAccountId }
             } else null
         )
     }
@@ -174,24 +176,47 @@ fun TransactionEditorSheet(
 
             // ─── Account Selectors ───
             if (fireflyData.hasSynced) {
+                val sourceAccounts = when (editType) {
+                    TransactionType.DEPOSIT -> fireflyData.revenueAccounts + fireflyData.assetAccounts
+                    else -> fireflyData.assetAccounts
+                }
+                
+                val destAccounts = when (editType) {
+                    TransactionType.WITHDRAWAL -> fireflyData.expenseAccounts
+                    TransactionType.DEPOSIT -> fireflyData.assetAccounts
+                    TransactionType.TRANSFER -> fireflyData.assetAccounts
+                }
+
                 AccountSelector(
-                    accounts = fireflyData.assetAccounts,
+                    accounts = sourceAccounts,
                     selectedAccount = selectedSourceAccount,
                     label = "Source Account",
                     onAccountSelected = { acc ->
                         selectedSourceAccount = acc
                         transaction.sourceAccountId = acc?.id
                         transaction.sourceAccountName = acc?.name
+                        
+                        // Auto-switch to Transfer if both are assets
+                        if (acc?.type == "asset" && selectedDestAccount?.type == "asset") {
+                            editType = TransactionType.TRANSFER
+                            transaction.correctedType = TransactionType.TRANSFER
+                        }
                     }
                 )
                 AccountSelector(
-                    accounts = fireflyData.expenseAccounts + fireflyData.revenueAccounts,
+                    accounts = destAccounts,
                     selectedAccount = selectedDestAccount,
                     label = "Destination",
                     onAccountSelected = { acc ->
                         selectedDestAccount = acc
                         transaction.destinationAccountId = acc?.id
                         transaction.destinationAccountName = acc?.name
+
+                        // Auto-switch to Transfer if both are assets
+                        if (acc?.type == "asset" && selectedSourceAccount?.type == "asset") {
+                            editType = TransactionType.TRANSFER
+                            transaction.correctedType = TransactionType.TRANSFER
+                        }
                     }
                 )
             }
