@@ -107,7 +107,10 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
      * on the Transactions screen.
      * Returns true if it was a new transaction (not a duplicate).
      */
-    fun addTransactionFromNotification(transaction: ParsedTransaction): Boolean {
+    fun addTransactionFromNotification(
+        transaction: ParsedTransaction,
+        accounts: List<com.swaraj429.firefly3smsscanner.model.FireflyAccount> = emptyList()
+    ): Boolean {
         // Avoid duplicates: same timestamp + amount already in list
         val isDuplicate = parsedTransactions.any {
             it.timestamp == transaction.timestamp && it.amount == transaction.amount
@@ -116,6 +119,22 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             DebugLog.log(TAG, "Notification transaction already in list, skipping duplicate")
             return false
         }
+
+        // Perform account matching
+        if (accounts.isNotEmpty()) {
+            val matcher = com.swaraj429.firefly3smsscanner.parser.AccountMatcher()
+            val match = matcher.findBestMatch(transaction.rawMessage, accounts)
+            if (match != null) {
+                if (transaction.effectiveType == com.swaraj429.firefly3smsscanner.model.TransactionType.WITHDRAWAL) {
+                    transaction.sourceAccountId = match.account.id
+                    transaction.sourceAccountName = match.account.name
+                } else if (transaction.effectiveType == com.swaraj429.firefly3smsscanner.model.TransactionType.DEPOSIT) {
+                    transaction.destinationAccountId = match.account.id
+                    transaction.destinationAccountName = match.account.name
+                }
+            }
+        }
+
         // Prepend so it appears at top
         parsedTransactions.add(0, transaction)
         statusMessage = "📩 New transaction from notification"

@@ -203,11 +203,18 @@ fun MainApp(
     }
 
     // ── Handle notification tap ───────────────────────────────────────────────
-    LaunchedEffect(pendingNotificationTransaction.value) {
+    LaunchedEffect(pendingNotificationTransaction.value, fireflyDataViewModel.isCacheLoaded) {
         val tx = pendingNotificationTransaction.value ?: return@LaunchedEffect
+        
+        // Wait for cache to load so we have accounts for matching
+        if (!fireflyDataViewModel.isCacheLoaded) return@LaunchedEffect
+        
         pendingNotificationTransaction.value = null  // consume it
 
-        smsViewModel.addTransactionFromNotification(tx)
+        smsViewModel.addTransactionFromNotification(
+            transaction = tx,
+            accounts = fireflyDataViewModel.assetAccounts
+        )
 
         // Navigate to Home (Transactions) tab
         navController.navigate(Screen.Home.route) {
