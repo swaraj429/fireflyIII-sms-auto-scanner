@@ -18,6 +18,7 @@ import com.swaraj429.firefly3smsscanner.model.SmsMessage
 import com.swaraj429.firefly3smsscanner.model.TransactionType
 import com.swaraj429.firefly3smsscanner.network.RetrofitClient
 import com.swaraj429.firefly3smsscanner.parser.SmsParser
+import com.swaraj429.firefly3smsscanner.parser.SenderMatcher
 import com.swaraj429.firefly3smsscanner.prefs.AppPrefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -77,8 +78,16 @@ class SmsReceiver : BroadcastReceiver() {
                 continue
             }
 
-            DebugLog.log(TAG, "  → Transaction: ₹${transaction.effectiveAmount} ${transaction.effectiveType}")
-            NotificationHelper.showTransactionNotification(context, transaction, nextNotificationId())
+            val pendingResult = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    SenderMatcher.applyConfigMatch(context, transaction)
+                    DebugLog.log(TAG, "  → Transaction: ₹${transaction.effectiveAmount} ${transaction.effectiveType}")
+                    NotificationHelper.showTransactionNotification(context, transaction, nextNotificationId())
+                } finally {
+                    pendingResult.finish()
+                }
+            }
         }
     }
 

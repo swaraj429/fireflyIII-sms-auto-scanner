@@ -371,6 +371,41 @@ private fun TransactionCard(
                 }
             }
 
+            // Detected Account Suggestions
+            if (transaction.possibleAccountMatches.size > 1) {
+                Column {
+                    Text(
+                        text = "✨ Suggested Accounts (Detected in SMS):",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        transaction.possibleAccountMatches.forEach { acc ->
+                            SuggestionChip(
+                                onClick = {
+                                    if (editType == TransactionType.DEBIT) {
+                                        selectedSourceName = acc.name
+                                        selectedSourceId = acc.accountId
+                                        transaction.sourceAccountId = acc.accountId
+                                        transaction.sourceAccountName = acc.name
+                                    } else {
+                                        selectedDestName = acc.name
+                                        selectedDestId = acc.accountId
+                                        transaction.destinationAccountId = acc.accountId
+                                        transaction.destinationAccountName = acc.name
+                                    }
+                                },
+                                label = { Text("${acc.name} (*${acc.lastDigits})") }
+                            )
+                        }
+                    }
+                }
+            }
+
             // Source account selector
             if (fireflyData.hasSynced && fireflyData.assetAccounts.isNotEmpty()) {
                 ExposedDropdownMenuBox(

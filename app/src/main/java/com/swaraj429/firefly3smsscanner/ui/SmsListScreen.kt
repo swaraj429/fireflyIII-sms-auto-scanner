@@ -20,6 +20,7 @@ import java.util.*
 @Composable
 fun SmsListScreen(
     viewModel: SmsViewModel,
+    fireflyDataViewModel: com.swaraj429.firefly3smsscanner.viewmodel.FireflyDataViewModel,
     hasPermission: Boolean,
     onRequestPermission: () -> Unit,
     onNavigateToParsed: () -> Unit
@@ -167,7 +168,7 @@ fun SmsListScreen(
         if (viewModel.smsMessages.isNotEmpty()) {
             Button(
                 onClick = {
-                    viewModel.parseMessages()
+                    viewModel.parseMessages(fireflyDataViewModel.accountIndices)
                     onNavigateToParsed()
                 },
                 modifier = Modifier.fillMaxWidth(),

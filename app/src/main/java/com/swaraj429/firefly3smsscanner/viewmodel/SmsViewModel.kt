@@ -11,6 +11,12 @@ import com.swaraj429.firefly3smsscanner.model.ParsedTransaction
 import com.swaraj429.firefly3smsscanner.model.SmsMessage
 import com.swaraj429.firefly3smsscanner.parser.SmsParser
 import com.swaraj429.firefly3smsscanner.sms.SmsReader
+import com.swaraj429.firefly3smsscanner.parser.SenderMatcher
+import androidx.lifecycle.viewModelScope
+import com.swaraj429.firefly3smsscanner.model.AccountIndex
+import com.swaraj429.firefly3smsscanner.parser.AccountMatcher
+import com.swaraj429.firefly3smsscanner.model.TransactionType
+import kotlinx.coroutines.launch
 import java.util.*
 
 class SmsViewModel(application: Application) : AndroidViewModel(application) {
@@ -74,16 +80,41 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         DebugLog.log(TAG, "Loaded ${samples.size} sample messages")
     }
 
-    fun parseMessages() {
-        DebugLog.log(TAG, "Parsing ${smsMessages.size} messages...")
+    fun parseMessages(accountIndices: List<AccountIndex> = emptyList()) {
+        viewModelScope.launch {
+            DebugLog.log(TAG, "Parsing ${smsMessages.size} messages...")
 
-        val results = SmsParser.parseAll(smsMessages)
+            val results = SmsParser.parseAll(smsMessages)
+            
+            val context = getApplication<Application>()
+            results.forEach { tx ->
+                // First try auto-detecting account from SMS content
+                val matchedAccounts = AccountMatcher.matchAccounts(tx.rawMessage, accountIndices)
+                if (matchedAccounts.isNotEmpty()) {
+                    tx.possibleAccountMatches = matchedAccounts
+                    if (matchedAccounts.size == 1) {
+                        val acc = matchedAccounts.first()
+                        if (tx.effectiveType == TransactionType.DEBIT) {
+                            tx.sourceAccountId = acc.accountId
+                            tx.sourceAccountName = acc.name
+                        } else {
+                            tx.destinationAccountId = acc.accountId
+                            tx.destinationAccountName = acc.name
+                        }
+                        DebugLog.log(TAG, "Auto-matched account ${acc.name} for tx ${tx.effectiveAmount}")
+                    }
+                } else {
+                    // Fallback to sender based config mapping
+                    SenderMatcher.applyConfigMatch(context, tx)
+                }
+            }
 
-        parsedTransactions.clear()
-        parsedTransactions.addAll(results)
+            parsedTransactions.clear()
+            parsedTransactions.addAll(results)
 
-        statusMessage = "Parsed ${results.size}/${smsMessages.size} messages"
-        DebugLog.log(TAG, "Parse complete: ${results.size}/${smsMessages.size}")
+            statusMessage = "Parsed ${results.size}/${smsMessages.size} messages"
+            DebugLog.log(TAG, "Parse complete: ${results.size}/${smsMessages.size}")
+        }
     }
 
     /**

@@ -22,6 +22,8 @@ data class ParsedTransaction(
     var sourceAccountName: String? = null,
     var destinationAccountId: String? = null,
     var destinationAccountName: String? = null,
+    // Detected potential accounts
+    var possibleAccountMatches: List<com.swaraj429.firefly3smsscanner.model.AccountIndex> = emptyList(),
     // Tracking
     var status: SendStatus = SendStatus.PENDING
 ) {

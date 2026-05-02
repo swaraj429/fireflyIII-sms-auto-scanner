@@ -102,6 +102,7 @@ sealed class Screen(val route: String, val title: String, val icon: @Composable 
     data object Setup : Screen("setup", "Setup", { Icon(Icons.Default.Settings, "Setup") })
     data object SmsList : Screen("sms", "SMS", { Icon(Icons.Default.Sms, "SMS") })
     data object Transactions : Screen("transactions", "Txns", { Icon(Icons.Default.Receipt, "Transactions") })
+    data object ConfigMappings : Screen("config_mappings", "Mappings", { Icon(Icons.Default.List, "Mappings") })
     data object Debug : Screen("debug", "Debug", { Icon(Icons.Default.BugReport, "Debug") })
 }
 
@@ -118,6 +119,7 @@ fun MainApp(
     val smsViewModel: SmsViewModel = viewModel()
     val transactionViewModel: TransactionViewModel = viewModel()
     val fireflyDataViewModel: FireflyDataViewModel = viewModel()
+    val senderConfigViewModel: SenderConfigViewModel = viewModel()
 
     // SMS permissions (READ + RECEIVE)
     var hasSmsPermission by remember {
@@ -187,7 +189,7 @@ fun MainApp(
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    val screens = listOf(Screen.Setup, Screen.SmsList, Screen.Transactions, Screen.Debug)
+    val screens = listOf(Screen.Setup, Screen.SmsList, Screen.Transactions, Screen.ConfigMappings, Screen.Debug)
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
@@ -237,6 +239,7 @@ fun MainApp(
             composable(Screen.SmsList.route) {
                 SmsListScreen(
                     viewModel = smsViewModel,
+                    fireflyDataViewModel = fireflyDataViewModel,
                     hasPermission = hasSmsPermission,
                     onRequestPermission = {
                         permissionLauncher.launch(
@@ -257,6 +260,15 @@ fun MainApp(
                     smsViewModel = smsViewModel,
                     transactionViewModel = transactionViewModel,
                     fireflyDataViewModel = fireflyDataViewModel
+                )
+            }
+
+            composable(Screen.ConfigMappings.route) {
+                val uniqueSenders = smsViewModel.smsMessages.map { it.sender }.distinct()
+                SenderConfigScreen(
+                    viewModel = senderConfigViewModel,
+                    availableSenders = uniqueSenders,
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
 

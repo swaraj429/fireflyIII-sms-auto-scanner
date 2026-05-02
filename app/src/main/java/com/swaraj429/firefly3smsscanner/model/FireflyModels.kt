@@ -122,4 +122,11 @@ data class FireflyBudgetAttributes(
 data class FireflyCategory(val id: String, val name: String)
 data class FireflyTag(val id: String, val name: String)
 data class FireflyBudget(val id: String, val name: String)
-data class FireflyAccount(val id: String, val name: String, val type: String)
+data class FireflyAccount(val id: String, val name: String, val type: String, val accountNumber: String?)
+
+data class AccountIndex(
+    val accountId: String,
+    val name: String,
+    val lastDigits: String,
+    val type: String // e.g. "asset", "liability", "credit card"
+)

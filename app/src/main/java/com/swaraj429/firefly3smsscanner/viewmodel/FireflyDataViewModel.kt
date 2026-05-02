@@ -30,6 +30,8 @@ class FireflyDataViewModel(application: Application) : AndroidViewModel(applicat
     val assetAccounts = mutableStateListOf<FireflyAccount>()
     val expenseAccounts = mutableStateListOf<FireflyAccount>()
     val revenueAccounts = mutableStateListOf<FireflyAccount>()
+    
+    val accountIndices = mutableStateListOf<AccountIndex>()
 
     var isLoading by mutableStateOf(false)
     var lastSyncStatus by mutableStateOf("")
@@ -55,6 +57,8 @@ class FireflyDataViewModel(application: Application) : AndroidViewModel(applicat
                 fetchAccounts(api, "asset", assetAccounts)
                 fetchAccounts(api, "expense", expenseAccounts)
                 fetchAccounts(api, "revenue", revenueAccounts)
+
+                buildAccountIndex()
 
                 hasSynced = true
                 lastSyncStatus = "✅ Synced: ${categories.size} categories, ${tags.size} tags, " +
@@ -137,7 +141,8 @@ class FireflyDataViewModel(application: Application) : AndroidViewModel(applicat
                     FireflyAccount(
                         id = it.id,
                         name = it.attributes.name,
-                        type = it.attributes.type
+                        type = it.attributes.type,
+                        accountNumber = it.attributes.accountNumber
                     )
                 } ?: emptyList()
                 target.clear()
@@ -149,5 +154,13 @@ class FireflyDataViewModel(application: Application) : AndroidViewModel(applicat
         } catch (e: Exception) {
             DebugLog.log(TAG, "$type accounts error: ${e.message}")
         }
+    }
+
+    private fun buildAccountIndex() {
+        val allAccounts = assetAccounts + expenseAccounts + revenueAccounts
+        val indices = com.swaraj429.firefly3smsscanner.parser.AccountMatcher.buildIndex(allAccounts)
+        accountIndices.clear()
+        accountIndices.addAll(indices)
+        DebugLog.log(TAG, "Built AccountIndex with ${indices.size} entries")
     }
 }
