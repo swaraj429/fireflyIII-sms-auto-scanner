@@ -137,7 +137,9 @@ class FireflyDataViewModel(application: Application) : AndroidViewModel(applicat
                     FireflyAccount(
                         id = it.id,
                         name = it.attributes.name,
-                        type = it.attributes.type
+                        type = it.attributes.type,
+                        accountNumber = it.attributes.accountNumber,
+                        accountRole = it.attributes.accountRole
                     )
                 } ?: emptyList()
                 target.clear()

@@ -159,6 +159,9 @@ fun MainApp(
         DebugLog.log("Permission", "POST_NOTIFICATIONS: ${if (granted) "granted ✓" else "denied ✗"}")
     }
     LaunchedEffect(Unit) {
+        // Fetch Firefly data on app start so account lists are ready for SMS matching
+        fireflyDataViewModel.refreshAll()
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(
                     context, Manifest.permission.POST_NOTIFICATIONS
@@ -237,6 +240,7 @@ fun MainApp(
             composable(Screen.SmsList.route) {
                 SmsListScreen(
                     viewModel = smsViewModel,
+                    fireflyDataViewModel = fireflyDataViewModel,
                     hasPermission = hasSmsPermission,
                     onRequestPermission = {
                         permissionLauncher.launch(

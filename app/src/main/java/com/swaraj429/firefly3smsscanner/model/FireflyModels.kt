@@ -68,6 +68,7 @@ data class FireflyAccountAttributes(
     val name: String,
     val type: String, // "asset", "expense", "revenue"
     @SerializedName("account_number") val accountNumber: String?,
+    @SerializedName("account_role") val accountRole: String?,
     @SerializedName("current_balance") val currentBalance: String?
 )
 
@@ -122,4 +123,10 @@ data class FireflyBudgetAttributes(
 data class FireflyCategory(val id: String, val name: String)
 data class FireflyTag(val id: String, val name: String)
 data class FireflyBudget(val id: String, val name: String)
-data class FireflyAccount(val id: String, val name: String, val type: String)
+data class FireflyAccount(
+    val id: String, 
+    val name: String, 
+    val type: String,
+    val accountNumber: String? = null,
+    val accountRole: String? = null
+)

@@ -74,10 +74,25 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         DebugLog.log(TAG, "Loaded ${samples.size} sample messages")
     }
 
-    fun parseMessages() {
+    fun parseMessages(accounts: List<com.swaraj429.firefly3smsscanner.model.FireflyAccount> = emptyList()) {
         DebugLog.log(TAG, "Parsing ${smsMessages.size} messages...")
 
         val results = SmsParser.parseAll(smsMessages)
+        val matcher = com.swaraj429.firefly3smsscanner.parser.AccountMatcher()
+
+        results.forEach { txn ->
+            val match = matcher.findBestMatch(txn.rawMessage, accounts)
+            if (match != null) {
+                // Determine source or destination based on transaction type
+                if (txn.effectiveType == com.swaraj429.firefly3smsscanner.model.TransactionType.DEBIT) {
+                    txn.sourceAccountId = match.account.id
+                    txn.sourceAccountName = match.account.name
+                } else if (txn.effectiveType == com.swaraj429.firefly3smsscanner.model.TransactionType.CREDIT) {
+                    txn.destinationAccountId = match.account.id
+                    txn.destinationAccountName = match.account.name
+                }
+            }
+        }
 
         parsedTransactions.clear()
         parsedTransactions.addAll(results)

@@ -16,10 +16,13 @@ import com.swaraj429.firefly3smsscanner.viewmodel.SmsViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
+import com.swaraj429.firefly3smsscanner.viewmodel.FireflyDataViewModel
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SmsListScreen(
     viewModel: SmsViewModel,
+    fireflyDataViewModel: FireflyDataViewModel,
     hasPermission: Boolean,
     onRequestPermission: () -> Unit,
     onNavigateToParsed: () -> Unit
@@ -167,7 +170,8 @@ fun SmsListScreen(
         if (viewModel.smsMessages.isNotEmpty()) {
             Button(
                 onClick = {
-                    viewModel.parseMessages()
+                    val accounts = fireflyDataViewModel.assetAccounts + fireflyDataViewModel.expenseAccounts + fireflyDataViewModel.revenueAccounts
+                    viewModel.parseMessages(accounts)
                     onNavigateToParsed()
                 },
                 modifier = Modifier.fillMaxWidth(),
