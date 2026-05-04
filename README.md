@@ -55,9 +55,11 @@ Before submitting, enrich each transaction with:
 - One-tap sync of all categories, tags, budgets, and accounts
 - Cached in-session — no repeated API calls while reviewing
 
-### 🐛 Built-in Debug Log
-- Timestamped in-app log of every API call, SMS read, and parse decision
-- Shareable plain-text export for issue reporting
+### 🧠 Smart Rule-Based Auto-Categorization
+- Create IF/THEN rules to automatically categorize transactions based on SMS keywords
+- Examples: "SWIGGY" → Food & Dining, "UBER" → Transport
+- Rules apply during SMS parsing for instant categorization
+- Manage rules in the dedicated Rules tab
 
 ---
 
@@ -94,14 +96,14 @@ cd firefly-3-sms-auto-scanner
    - `RECEIVE_SMS` — for real-time detection
    - `POST_NOTIFICATIONS` — to show transaction alerts (Android 13+)
 
-2. **Go to Setup tab → Enter your Firefly III details:**
+2. **Go to Settings tab → Enter your Firefly III details:**
    - Base URL (e.g. `https://firefly.yourdomain.com`)
    - Personal Access Token
    - Default Account ID (find it in Firefly → Accounts → click your account → note the ID in the URL)
 
 3. **Tap "🔌 Test Connection"** — you should see a green ✅ response
 
-4. **On the Transactions tab → tap "Sync"** to pull categories, budgets, tags, and accounts
+4. **On the Home tab → tap "Sync"** to pull categories, budgets, tags, and accounts
 
 5. **Go to SMS tab → select a date range → tap "📥 Scan SMS"** to load and parse messages
 
@@ -119,7 +121,8 @@ app/
 ├── prefs/              # SharedPreferences wrapper (AppPrefs)
 ├── viewmodel/          # SmsViewModel, TransactionViewModel, SetupViewModel,
 │                       #   FireflyDataViewModel
-├── ui/                 # Compose screens (Setup, SmsList, Transaction, Debug)
+├── ui/                 # Compose screens (Home, SMS, Rules, Settings, Debug)
+│                       #   + sheets (TransactionEditor) + components
 └── debug/              # DebugLog — in-memory timestamped log
 ```
 
@@ -159,11 +162,9 @@ Contributions are what make open source great. Whether it's fixing a bug, adding
 
 ---
 
-## 🗺️ Roadmap
-
+- [x] **v0.0.2** — UI revamp with tabbed navigation and rule-based auto-categorization
 - [ ] **v1.0** — Stable release + signed APK
 - [ ] Auto-send mode (skip review, send all transactions instantly)
-- [ ] Rule-based auto-categorisation (e.g. "SWIGGY" → Food & Dining)
 - [ ] Support for multiple Firefly III accounts
 - [ ] Widget showing today's spend
 - [ ] Import from CSV/bank statement
