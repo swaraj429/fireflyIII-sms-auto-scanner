@@ -149,6 +149,7 @@ fun MainApp(
     val transactionViewModel: TransactionViewModel = viewModel()
     val fireflyDataViewModel: FireflyDataViewModel = viewModel()
     val smsHistoryViewModel: SmsHistoryViewModel = viewModel()
+    val rulesViewModel: RulesViewModel = viewModel()
 
     // SMS permissions (READ + RECEIVE)
     var hasSmsPermission by remember {
@@ -318,7 +319,8 @@ fun MainApp(
                     smsViewModel = smsViewModel,
                     transactionViewModel = transactionViewModel,
                     fireflyDataViewModel = fireflyDataViewModel,
-                    smsHistoryViewModel = smsHistoryViewModel
+                    smsHistoryViewModel = smsHistoryViewModel,
+                    rulesViewModel = rulesViewModel
                 )
             }
 
@@ -347,7 +349,10 @@ fun MainApp(
             }
 
             composable(Screen.Rules.route) {
-                RulesScreen()
+                RulesScreen(
+                    rulesViewModel = rulesViewModel,
+                    fireflyDataViewModel = fireflyDataViewModel
+                )
             }
 
             composable(Screen.Settings.route) {

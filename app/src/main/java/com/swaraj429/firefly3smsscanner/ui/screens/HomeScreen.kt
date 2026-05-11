@@ -30,6 +30,9 @@ import com.swaraj429.firefly3smsscanner.viewmodel.FireflyDataViewModel
 import com.swaraj429.firefly3smsscanner.viewmodel.SmsHistoryViewModel
 import com.swaraj429.firefly3smsscanner.viewmodel.SmsViewModel
 import com.swaraj429.firefly3smsscanner.viewmodel.TransactionViewModel
+import com.swaraj429.firefly3smsscanner.viewmodel.RulesViewModel
+import com.swaraj429.firefly3smsscanner.parser.RuleEngine
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 /**
  * Home/Transactions screen that shows all SMS transaction records from the
@@ -43,7 +46,8 @@ fun HomeScreen(
     smsViewModel: SmsViewModel,
     transactionViewModel: TransactionViewModel,
     fireflyDataViewModel: FireflyDataViewModel,
-    smsHistoryViewModel: SmsHistoryViewModel
+    smsHistoryViewModel: SmsHistoryViewModel,
+    rulesViewModel: RulesViewModel = viewModel()
 ) {
     var selectedTransaction by remember { mutableStateOf<ParsedTransaction?>(null) }
     var selectedFilter by remember { mutableStateOf("All") }
@@ -286,6 +290,11 @@ fun HomeScreen(
 
     // ─── Transaction Editor Sheet ───
     selectedTransaction?.let { txn ->
+        // Apply rules to fill empty fields when the editor opens
+        LaunchedEffect(txn) {
+            RuleEngine.applyRules(txn, rulesViewModel.rules)
+        }
+
         TransactionEditorSheet(
             transaction = txn,
             fireflyData = fireflyDataViewModel,
