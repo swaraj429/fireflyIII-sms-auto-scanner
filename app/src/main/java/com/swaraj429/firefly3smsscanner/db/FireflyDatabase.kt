@@ -10,14 +10,16 @@ import androidx.room.RoomDatabase
         CachedAccount::class,
         CachedCategory::class,
         CachedTag::class,
-        CachedBudget::class
+        CachedBudget::class,
+        SmsRecordEntity::class
     ],
-    version = 1,
+    version = 3,
     exportSchema = false
 )
 abstract class FireflyDatabase : RoomDatabase() {
 
     abstract fun fireflyDao(): FireflyDao
+    abstract fun smsRecordDao(): SmsRecordDao
 
     companion object {
         @Volatile

@@ -162,7 +162,9 @@ Contributions are what make open source great. Whether it's fixing a bug, adding
 
 ---
 
-- [x] **v0.0.2** — UI revamp with tabbed navigation and rule-based auto-categorization
+- [x] **v0.0.1-alpha** — Real-time SMS detection, parser, and basic UI
+- [x] **v0.0.2** — Tabbed navigation, Smart Rules, and improved editor
+- [x] **v0.0.3-alpha** — Persistent SMS history (Room DB), hash-based deduplication, in-app Database Viewer, and fixed Account Auto-matching
 - [ ] **v1.0** — Stable release + signed APK
 - [ ] Auto-send mode (skip review, send all transactions instantly)
 - [ ] Support for multiple Firefly III accounts

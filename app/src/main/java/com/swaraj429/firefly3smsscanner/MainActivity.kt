@@ -36,10 +36,10 @@ import com.swaraj429.firefly3smsscanner.debug.DebugLog
 import com.swaraj429.firefly3smsscanner.model.ParsedTransaction
 import com.swaraj429.firefly3smsscanner.model.TransactionType
 import com.swaraj429.firefly3smsscanner.notification.NotificationHelper
-import com.swaraj429.firefly3smsscanner.ui.DebugScreen
 import com.swaraj429.firefly3smsscanner.ui.screens.*
 import com.swaraj429.firefly3smsscanner.ui.theme.*
 import com.swaraj429.firefly3smsscanner.viewmodel.*
+import java.util.Calendar
 
 class MainActivity : ComponentActivity() {
 
@@ -148,6 +148,7 @@ fun MainApp(
     val smsViewModel: SmsViewModel = viewModel()
     val transactionViewModel: TransactionViewModel = viewModel()
     val fireflyDataViewModel: FireflyDataViewModel = viewModel()
+    val smsHistoryViewModel: SmsHistoryViewModel = viewModel()
 
     // SMS permissions (READ + RECEIVE)
     var hasSmsPermission by remember {
@@ -188,10 +189,12 @@ fun MainApp(
     ) { granted ->
         DebugLog.log("Permission", "POST_NOTIFICATIONS: ${if (granted) "granted ✓" else "denied ✗"}")
     }
+
+    // ── Auto-scan last 30 days on launch ──
     LaunchedEffect(Unit) {
         // Fetch Firefly data on app start so account lists are ready for SMS matching
         fireflyDataViewModel.refreshAll()
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(
                     context, Manifest.permission.POST_NOTIFICATIONS
@@ -200,6 +203,40 @@ fun MainApp(
                 notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
+
+        // Auto-scan: set date range to last 30 days, load SMS, parse, and save to history
+        if (hasSmsPermission) {
+            val cal = Calendar.getInstance()
+            smsViewModel.toDate = cal.timeInMillis
+            cal.add(Calendar.DAY_OF_YEAR, -30)
+            smsViewModel.fromDate = cal.timeInMillis
+
+            smsViewModel.loadSmsByDateRange()
+        }
+    }
+
+    // Auto-parse when SMS messages are loaded and Firefly data is ready.
+    // Keys include hasSynced and assetAccounts.size so this re-fires
+    // after the network refresh populates accounts (critical after a
+    // destructive DB migration that empties the cache).
+    LaunchedEffect(
+        smsViewModel.smsMessages.size,
+        fireflyDataViewModel.isCacheLoaded,
+        fireflyDataViewModel.hasSynced,
+        fireflyDataViewModel.assetAccounts.size
+    ) {
+        if (smsViewModel.smsMessages.isEmpty()) return@LaunchedEffect
+        if (!fireflyDataViewModel.isCacheLoaded) return@LaunchedEffect
+        if (smsViewModel.usingSampleData) return@LaunchedEffect
+
+        // Don't parse with empty accounts if a sync is still in progress —
+        // wait for the next re-trigger when accounts arrive.
+        val accounts = fireflyDataViewModel.assetAccounts +
+                fireflyDataViewModel.expenseAccounts +
+                fireflyDataViewModel.revenueAccounts
+        if (accounts.isEmpty() && fireflyDataViewModel.isLoading) return@LaunchedEffect
+
+        smsViewModel.parseMessages(accounts, smsHistoryViewModel)
     }
 
     // ── Handle notification tap ───────────────────────────────────────────────
@@ -213,7 +250,8 @@ fun MainApp(
 
         smsViewModel.addTransactionFromNotification(
             transaction = tx,
-            accounts = fireflyDataViewModel.assetAccounts
+            accounts = fireflyDataViewModel.assetAccounts,
+            historyViewModel = smsHistoryViewModel
         )
 
         // Navigate to Home (Transactions) tab
@@ -279,7 +317,8 @@ fun MainApp(
                 HomeScreen(
                     smsViewModel = smsViewModel,
                     transactionViewModel = transactionViewModel,
-                    fireflyDataViewModel = fireflyDataViewModel
+                    fireflyDataViewModel = fireflyDataViewModel,
+                    smsHistoryViewModel = smsHistoryViewModel
                 )
             }
 
@@ -302,7 +341,8 @@ fun MainApp(
                             launchSingleTop = true
                             restoreState = true
                         }
-                    }
+                    },
+                    smsHistoryViewModel = smsHistoryViewModel
                 )
             }
 
@@ -311,12 +351,13 @@ fun MainApp(
             }
 
             composable(Screen.Settings.route) {
-                SettingsScreen(viewModel = setupViewModel)
+                SettingsScreen(
+                    viewModel = setupViewModel,
+                    smsHistoryViewModel = smsHistoryViewModel
+                )
             }
 
-            composable(Screen.Debug.route) {
-                DebugScreen()
-            }
+
         }
     }
 }

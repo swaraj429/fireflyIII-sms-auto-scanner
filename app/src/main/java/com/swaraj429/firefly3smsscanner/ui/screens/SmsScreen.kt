@@ -19,6 +19,7 @@ import com.swaraj429.firefly3smsscanner.ui.components.SMSCard
 import com.swaraj429.firefly3smsscanner.ui.components.SmsCardInfo
 import com.swaraj429.firefly3smsscanner.ui.theme.*
 import com.swaraj429.firefly3smsscanner.viewmodel.FireflyDataViewModel
+import com.swaraj429.firefly3smsscanner.viewmodel.SmsHistoryViewModel
 import com.swaraj429.firefly3smsscanner.viewmodel.SmsViewModel
 import java.util.Calendar
 
@@ -32,7 +33,8 @@ fun SmsScreen(
     fireflyDataViewModel: FireflyDataViewModel,
     hasPermission: Boolean,
     onRequestPermission: () -> Unit,
-    onNavigateToParsed: () -> Unit
+    onNavigateToParsed: () -> Unit,
+    smsHistoryViewModel: SmsHistoryViewModel? = null
 ) {
     var selectedFilter by remember { mutableStateOf("All") }
     var selectedRange by remember { mutableStateOf("7 Days") }
@@ -148,7 +150,7 @@ fun SmsScreen(
             Button(
                 onClick = {
                     val accounts = fireflyDataViewModel.assetAccounts + fireflyDataViewModel.expenseAccounts + fireflyDataViewModel.revenueAccounts
-                    viewModel.parseMessages(accounts)
+                    viewModel.parseMessages(accounts, smsHistoryViewModel)
                     onNavigateToParsed()
                 },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),

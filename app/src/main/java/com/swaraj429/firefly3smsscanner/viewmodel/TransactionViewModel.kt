@@ -21,7 +21,18 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
 
     var lastResult by mutableStateOf("")
 
-    fun sendTransaction(transaction: ParsedTransaction, onComplete: (Boolean) -> Unit) {
+    /**
+     * Send a transaction to Firefly III and notify the history ViewModel
+     * so it can update the sync status in the local DB.
+     *
+     * @param historyViewModel optional — when provided, the record in the
+     *        Room DB will be marked as SENT or FAILED automatically.
+     */
+    fun sendTransaction(
+        transaction: ParsedTransaction,
+        historyViewModel: SmsHistoryViewModel? = null,
+        onComplete: (Boolean) -> Unit
+    ) {
         if (!prefs.isConfigured) {
             lastResult = "❌ Firefly not configured — go to Setup"
             DebugLog.log(TAG, "Cannot send — not configured")
@@ -113,12 +124,20 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
                     transaction.status = SendStatus.SENT
                     lastResult = "✅ Created transaction #$id"
                     DebugLog.log(TAG, "Transaction created successfully: #$id")
+
+                    // Update the history record in Room
+                    historyViewModel?.markSent(transaction, id)
+
                     onComplete(true)
                 } else {
                     val errorBody = response.errorBody()?.string() ?: "Unknown error"
                     transaction.status = SendStatus.FAILED
                     lastResult = "❌ HTTP ${response.code()}: ${errorBody.take(200)}"
                     DebugLog.log(TAG, "Transaction FAILED: ${response.code()} - $errorBody")
+
+                    // Update the history record in Room
+                    historyViewModel?.markFailed(transaction)
+
                     onComplete(false)
                 }
             } catch (e: Exception) {
@@ -126,6 +145,10 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
                 lastResult = "❌ Error: ${e.message}"
                 DebugLog.log(TAG, "Transaction ERROR: ${e.message}")
                 Log.e(TAG, "Failed to create transaction", e)
+
+                // Update the history record in Room
+                historyViewModel?.markFailed(transaction)
+
                 onComplete(false)
             }
         }

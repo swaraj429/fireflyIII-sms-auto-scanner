@@ -71,4 +71,29 @@ interface FireflyDao {
         deleteBudgets()
         insertBudgets(budgets)
     }
+
+    // --- Counts (for debug/stats) ---
+    @Query("SELECT COUNT(*) FROM accounts")
+    suspend fun countAccounts(): Int
+
+    @Query("SELECT COUNT(*) FROM categories")
+    suspend fun countCategories(): Int
+
+    @Query("SELECT COUNT(*) FROM tags")
+    suspend fun countTags(): Int
+
+    @Query("SELECT COUNT(*) FROM budgets")
+    suspend fun countBudgets(): Int
+
+    // --- Clear all tables ---
+    @Query("DELETE FROM accounts")
+    suspend fun deleteAllAccounts()
+
+    @Transaction
+    suspend fun clearAll() {
+        deleteAllAccounts()
+        deleteCategories()
+        deleteTags()
+        deleteBudgets()
+    }
 }

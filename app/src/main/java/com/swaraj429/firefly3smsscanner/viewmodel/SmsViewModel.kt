@@ -74,7 +74,17 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         DebugLog.log(TAG, "Loaded ${samples.size} sample messages")
     }
 
-    fun parseMessages(accounts: List<com.swaraj429.firefly3smsscanner.model.FireflyAccount> = emptyList()) {
+    /**
+     * Parse messages and optionally persist results to the SMS history DB.
+     *
+     * @param accounts  Firefly accounts for auto-matching
+     * @param historyViewModel  when provided, parsed transactions are saved
+     *                          to Room with hash-based dedup
+     */
+    fun parseMessages(
+        accounts: List<com.swaraj429.firefly3smsscanner.model.FireflyAccount> = emptyList(),
+        historyViewModel: SmsHistoryViewModel? = null
+    ) {
         DebugLog.log(TAG, "Parsing ${smsMessages.size} messages...")
 
         val results = SmsParser.parseAll(smsMessages)
@@ -97,6 +107,9 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         parsedTransactions.clear()
         parsedTransactions.addAll(results)
 
+        // Persist to Room history (duplicates silently ignored via hash)
+        historyViewModel?.saveTransactions(results)
+
         statusMessage = "Parsed ${results.size}/${smsMessages.size} messages"
         DebugLog.log(TAG, "Parse complete: ${results.size}/${smsMessages.size}")
     }
@@ -109,7 +122,8 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun addTransactionFromNotification(
         transaction: ParsedTransaction,
-        accounts: List<com.swaraj429.firefly3smsscanner.model.FireflyAccount> = emptyList()
+        accounts: List<com.swaraj429.firefly3smsscanner.model.FireflyAccount> = emptyList(),
+        historyViewModel: SmsHistoryViewModel? = null
     ): Boolean {
         // Avoid duplicates: same timestamp + amount already in list
         val isDuplicate = parsedTransactions.any {
@@ -139,6 +153,10 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         parsedTransactions.add(0, transaction)
         statusMessage = "📩 New transaction from notification"
         DebugLog.log(TAG, "Added notification transaction: ₹${transaction.effectiveAmount} ${transaction.effectiveType}")
+
+        // Persist to history
+        historyViewModel?.saveTransactions(listOf(transaction))
+
         return true
     }
 }

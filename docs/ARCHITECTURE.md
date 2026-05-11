@@ -110,3 +110,66 @@ The base URL and access token can be changed at any time in the Setup screen. Ma
 ### Why SharedPreferences and not DataStore?
 
 The project deliberately keeps its dependency footprint minimal. `AppPrefs` is a thin wrapper around `SharedPreferences` with synchronous reads and async (`apply()`) writes — suitable for the simple key-value config this app stores. Migration to `DataStore` is a tracked roadmap item.
+
+---
+
+## SMS History — 30-Day Record Store
+
+### Problem
+
+Previously, parsed transactions lived only in `SmsViewModel.parsedTransactions` (in-memory). Closing the app meant losing all state. The user had no way to know which transactions were already sent to Firefly.
+
+### Solution
+
+A new Room table `sms_records` persists every parsed transaction with:
+
+| Column | Purpose |
+|---|---|
+| `smsHash` (unique index) | SHA-256 of `sender + body` — prevents duplicate records even if the same SMS is scanned multiple times |
+| `syncStatus` | `PENDING` / `SENT` / `FAILED` — tracks Firefly submission state |
+| `fireflyTransactionId` | The Firefly `data.id` returned on a successful POST |
+| `smsTimestamp` | Original SMS timestamp used for 30-day retention cutoff |
+
+### Deduplication Strategy
+
+```
+hash = SHA-256("sender|body")
+INSERT OR IGNORE INTO sms_records ...
+```
+
+The `IGNORE` conflict strategy on the unique `smsHash` index means scanning the same date range multiple times is safe — no duplicates are created.
+
+### Auto-Scan on Launch
+
+`MainActivity.LaunchedEffect(Unit)` now automatically:
+
+1. Sets `SmsViewModel.fromDate` to 30 days ago and `toDate` to now
+2. Calls `loadSmsByDateRange()` (if SMS permission is granted)
+3. When messages load, a second `LaunchedEffect` auto-parses them with account matching
+4. `SmsViewModel.parseMessages()` calls `SmsHistoryViewModel.saveTransactions()` to persist results
+
+### Sync Status Lifecycle
+
+```
+PENDING  ─(sendTransaction success)─→  SENT
+PENDING  ─(sendTransaction failure)─→  FAILED
+FAILED   ─(user retries)─────────────→  PENDING → ...
+```
+
+`TransactionViewModel.sendTransaction()` accepts an optional `SmsHistoryViewModel` reference and updates the Room record after each API call.
+
+### Retention / Cleanup
+
+On every `SmsHistoryViewModel.loadHistory()` call:
+
+1. `DELETE FROM sms_records WHERE smsTimestamp < :30daysAgo`
+2. Then `SELECT * WHERE smsTimestamp >= :30daysAgo ORDER BY smsTimestamp DESC`
+
+### HomeScreen Changes
+
+The Home tab now displays the **persisted history** (not just in-memory parsed data) with:
+
+- **Summary banner** showing total spend, income, and status pill counts (Pending/Sent/Failed)
+- **Filter chips**: All / Pending / Sent / Failed
+- **Bulk Send All** for pending transactions
+- If no history exists yet, a prompt directs to the SMS tab
