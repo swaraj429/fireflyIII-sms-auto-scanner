@@ -113,11 +113,6 @@ sealed class Screen(
         { Icon(Icons.Filled.Home, "Home") },
         { Icon(Icons.Outlined.Home, "Home") }
     )
-    data object SmsList : Screen(
-        "sms", "SMS",
-        { Icon(Icons.Filled.Sms, "SMS") },
-        { Icon(Icons.Outlined.Sms, "SMS") }
-    )
     data object Rules : Screen(
         "rules", "Rules",
         { Icon(Icons.Filled.AutoAwesome, "Rules") },
@@ -200,11 +195,15 @@ fun MainApp(
             }
         }
 
-        // Auto-scan: set date range to last 30 days, load SMS, parse, and save to history
+        // Auto-scan: set date range to This Month, load SMS, parse, and save to history
         if (hasSmsPermission) {
             val cal = Calendar.getInstance()
             smsViewModel.toDate = cal.timeInMillis
-            cal.add(Calendar.DAY_OF_YEAR, -30)
+            cal.set(Calendar.DAY_OF_MONTH, 1)
+            cal.set(Calendar.HOUR_OF_DAY, 0)
+            cal.set(Calendar.MINUTE, 0)
+            cal.set(Calendar.SECOND, 0)
+            cal.set(Calendar.MILLISECOND, 0)
             smsViewModel.fromDate = cal.timeInMillis
 
             smsViewModel.loadSmsByDateRange()
@@ -259,7 +258,7 @@ fun MainApp(
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    val screens = listOf(Screen.Home, Screen.SmsList, Screen.Rules, Screen.Settings)
+    val screens = listOf(Screen.Home, Screen.Rules, Screen.Settings)
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
@@ -315,15 +314,8 @@ fun MainApp(
                     transactionViewModel = transactionViewModel,
                     fireflyDataViewModel = fireflyDataViewModel,
                     smsHistoryViewModel = smsHistoryViewModel,
-                    rulesViewModel = rulesViewModel
-                )
-            }
-
-            composable(Screen.SmsList.route) {
-                SmsScreen(
-                    viewModel = smsViewModel,
-                    fireflyDataViewModel = fireflyDataViewModel,
-                    hasPermission = hasSmsPermission,
+                    rulesViewModel = rulesViewModel,
+                    hasSmsPermission = hasSmsPermission,
                     onRequestPermission = {
                         permissionLauncher.launch(
                             arrayOf(
@@ -331,15 +323,7 @@ fun MainApp(
                                 Manifest.permission.RECEIVE_SMS
                             )
                         )
-                    },
-                    onNavigateToParsed = {
-                        navController.navigate(Screen.Home.route) {
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    smsHistoryViewModel = smsHistoryViewModel
+                    }
                 )
             }
 

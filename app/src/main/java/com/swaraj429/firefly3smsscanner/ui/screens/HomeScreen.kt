@@ -37,6 +37,7 @@ import com.swaraj429.firefly3smsscanner.viewmodel.RulesViewModel
 import com.swaraj429.firefly3smsscanner.parser.RuleEngine
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 /**
  * Home/Transactions screen that shows all SMS transaction records from the
@@ -52,11 +53,27 @@ fun HomeScreen(
     transactionViewModel: TransactionViewModel,
     fireflyDataViewModel: FireflyDataViewModel,
     smsHistoryViewModel: SmsHistoryViewModel,
-    rulesViewModel: RulesViewModel = viewModel()
+    rulesViewModel: RulesViewModel = viewModel(),
+    hasSmsPermission: Boolean = false,
+    onRequestPermission: () -> Unit = {}
 ) {
     var selectedTransaction by remember { mutableStateOf<ParsedTransaction?>(null) }
     var transactionToDismiss by remember { mutableStateOf<ParsedTransaction?>(null) }
     var selectedFilter by remember { mutableStateOf("All") }
+
+    data class DateRangeOption(val label: String, val days: Int?, val thisMonth: Boolean = false)
+
+    val dateRangeOptions = remember {
+        listOf(
+            DateRangeOption("This Month", null, thisMonth = true),
+            DateRangeOption("Today", 0),
+            DateRangeOption("7 Days", 7),
+            DateRangeOption("30 Days", 30),
+            DateRangeOption("90 Days", 90),
+        )
+    }
+
+    var selectedDateRange by remember { mutableStateOf("This Month") }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -68,7 +85,12 @@ fun HomeScreen(
     val inMemoryList = smsViewModel.parsedTransactions
     val transactions = if (historyList.isNotEmpty()) historyList else inMemoryList
 
-    val filtered = transactions.filter { txn ->
+    // Filter by selected date range (client-side timestamp filter)
+    val rangeFilteredTransactions = transactions.filter { txn ->
+        txn.timestamp >= smsViewModel.fromDate && txn.timestamp <= smsViewModel.toDate
+    }
+
+    val filtered = rangeFilteredTransactions.filter { txn ->
         when (selectedFilter) {
             "Pending" -> txn.status == SendStatus.PENDING
             "Sent" -> txn.status == SendStatus.SENT
@@ -78,36 +100,78 @@ fun HomeScreen(
         }
     }
 
-    val pendingCount = transactions.count { it.status == SendStatus.PENDING }
-    val sentCount = transactions.count { it.status == SendStatus.SENT }
-    val failedCount = transactions.count { it.status == SendStatus.FAILED }
-    val dismissedCount = transactions.count { it.status == SendStatus.DISMISSED }
-    val activeCount = transactions.count { it.status != SendStatus.DISMISSED }
+    val pendingCount = rangeFilteredTransactions.count { it.status == SendStatus.PENDING }
+    val sentCount = rangeFilteredTransactions.count { it.status == SendStatus.SENT }
+    val failedCount = rangeFilteredTransactions.count { it.status == SendStatus.FAILED }
+    val dismissedCount = rangeFilteredTransactions.count { it.status == SendStatus.DISMISSED }
+    val activeCount = rangeFilteredTransactions.count { it.status != SendStatus.DISMISSED }
 
     // Dismissed transactions are excluded from totals
-    val totalSpend = transactions
+    val totalSpend = rangeFilteredTransactions
         .filter { it.effectiveType == TransactionType.WITHDRAWAL && it.status != SendStatus.FAILED && it.status != SendStatus.DISMISSED }
         .sumOf { it.effectiveAmount }
-    val totalIncome = transactions
+    val totalIncome = rangeFilteredTransactions
         .filter { it.effectiveType == TransactionType.DEPOSIT && it.status != SendStatus.FAILED && it.status != SendStatus.DISMISSED }
         .sumOf { it.effectiveAmount }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-        // ─── Summary Banner ───
-        if (transactions.isNotEmpty()) {
+            // ─── Summary Banner with Date Range Filter ───
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Text(
-                        "Last 30 Days",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(8.dp))
+                    // Date range filter inside the summary tile
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(dateRangeOptions) { option ->
+                            FilterChip(
+                                selected = selectedDateRange == option.label,
+                                onClick = {
+                                    selectedDateRange = option.label
+                                    val cal = Calendar.getInstance()
+                                    smsViewModel.toDate = cal.timeInMillis
+                                    when {
+                                        option.thisMonth -> {
+                                            cal.set(Calendar.DAY_OF_MONTH, 1)
+                                            cal.set(Calendar.HOUR_OF_DAY, 0)
+                                            cal.set(Calendar.MINUTE, 0)
+                                            cal.set(Calendar.SECOND, 0)
+                                            cal.set(Calendar.MILLISECOND, 0)
+                                        }
+                                        option.days == 0 -> {
+                                            cal.set(Calendar.HOUR_OF_DAY, 0)
+                                            cal.set(Calendar.MINUTE, 0)
+                                            cal.set(Calendar.SECOND, 0)
+                                            cal.set(Calendar.MILLISECOND, 0)
+                                        }
+                                        option.days != null -> {
+                                            cal.add(Calendar.DAY_OF_YEAR, -option.days)
+                                        }
+                                    }
+                                    smsViewModel.fromDate = cal.timeInMillis
+                                    // Auto-scan: triggers LaunchedEffect in MainActivity via smsMessages.size change
+                                    if (hasSmsPermission) {
+                                        smsViewModel.loadSmsByDateRange()
+                                    } else {
+                                        onRequestPermission()
+                                    }
+                                },
+                                label = { Text(option.label, style = MaterialTheme.typography.labelSmall) },
+                                shape = RoundedCornerShape(20.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Primary.copy(alpha = 0.15f),
+                                    selectedLabelColor = Primary
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(14.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -135,53 +199,53 @@ fun HomeScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(10.dp))
-
                     // ── Status pill row ──
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (pendingCount > 0) {
-                            StatusPill(
-                                count = pendingCount,
-                                label = "Pending",
-                                color = WarningAmber,
-                                icon = Icons.Filled.Schedule,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        if (sentCount > 0) {
-                            StatusPill(
-                                count = sentCount,
-                                label = "Sent",
-                                color = SuccessGreen,
-                                icon = Icons.Filled.CheckCircle,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        if (failedCount > 0) {
-                            StatusPill(
-                                count = failedCount,
-                                label = "Failed",
-                                color = ErrorCrimson,
-                                icon = Icons.Filled.Error,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        if (dismissedCount > 0) {
-                            StatusPill(
-                                count = dismissedCount,
-                                label = "Dismissed",
-                                color = MaterialTheme.colorScheme.outline,
-                                icon = Icons.Filled.Block,
-                                modifier = Modifier.weight(1f)
-                            )
+                    if (pendingCount > 0 || sentCount > 0 || failedCount > 0 || dismissedCount > 0) {
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (pendingCount > 0) {
+                                StatusPill(
+                                    count = pendingCount,
+                                    label = "Pending",
+                                    color = WarningAmber,
+                                    icon = Icons.Filled.Schedule,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            if (sentCount > 0) {
+                                StatusPill(
+                                    count = sentCount,
+                                    label = "Sent",
+                                    color = SuccessGreen,
+                                    icon = Icons.Filled.CheckCircle,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            if (failedCount > 0) {
+                                StatusPill(
+                                    count = failedCount,
+                                    label = "Failed",
+                                    color = ErrorCrimson,
+                                    icon = Icons.Filled.Error,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            if (dismissedCount > 0) {
+                                StatusPill(
+                                    count = dismissedCount,
+                                    label = "Dismissed",
+                                    color = MaterialTheme.colorScheme.outline,
+                                    icon = Icons.Filled.Block,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
         // ─── Sync status ───
         if (!fireflyDataViewModel.hasSynced) {
@@ -260,13 +324,17 @@ fun HomeScreen(
         }
 
         // ─── Timeline ───
-        if (transactions.isEmpty()) {
-            if (smsHistoryViewModel.isLoading) {
+        if (rangeFilteredTransactions.isEmpty()) {
+            if (smsHistoryViewModel.isLoading || smsViewModel.isLoading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = Primary)
                         Spacer(Modifier.height(12.dp))
-                        Text("Loading history…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            if (smsViewModel.isLoading) "Scanning SMS messages…" else "Loading history…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             } else {
@@ -274,10 +342,14 @@ fun HomeScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Filled.Receipt, null, Modifier.size(64.dp), MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
                         Spacer(Modifier.height(16.dp))
-                        Text("No transactions yet", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            if (transactions.isEmpty()) "No transactions yet" else "No transactions for $selectedDateRange",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "Go to SMS tab to scan and parse messages",
+                            "Select a date range above to scan messages",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )

@@ -14,6 +14,7 @@ import com.swaraj429.firefly3smsscanner.model.DismissReason
 import com.swaraj429.firefly3smsscanner.model.ParsedTransaction
 import com.swaraj429.firefly3smsscanner.model.SendStatus
 import com.swaraj429.firefly3smsscanner.model.TransactionType
+import com.swaraj429.firefly3smsscanner.parser.DescriptionExtractor
 import com.swaraj429.firefly3smsscanner.util.SmsHasher
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -257,13 +258,19 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
             DismissReason.fromString(dismissReason)
         } else null
 
+        val cleanDesc = if (DescriptionExtractor.isRawSenderOrEmpty(description, sender)) {
+            DescriptionExtractor.extractDescription(body, sender, txType == TransactionType.WITHDRAWAL)
+        } else {
+            description
+        }
+
         return ParsedTransaction(
             amount = amount,
             type = txType,
             rawMessage = body,
             sender = sender,
             timestamp = smsTimestamp,
-            description = description,
+            description = cleanDesc,
             status = sendSt,
             sourceAccountId = sourceAccountId,
             sourceAccountName = sourceAccountName,

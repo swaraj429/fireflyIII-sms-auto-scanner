@@ -26,6 +26,7 @@ import java.util.Calendar
 /**
  * Redesigned SMS screen with smart cards, filter chips, and quick-scan.
  */
+@Deprecated("Not wired to navigation. Kept for debug purposes only.")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SmsScreen(

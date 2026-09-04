@@ -28,9 +28,15 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     var statusMessage by mutableStateOf("")
     var usingSampleData by mutableStateOf(false)
 
-    // Date range state — default to last 7 days
+    // Date range state — default to This Month (1st of current month to now)
     var fromDate by mutableStateOf(
-        Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -7) }.timeInMillis
+        Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
     )
     var toDate by mutableStateOf(System.currentTimeMillis())
 

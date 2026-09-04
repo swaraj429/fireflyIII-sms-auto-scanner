@@ -51,16 +51,7 @@ object SmsParser {
         "credited from", "has been received"
     )
 
-    // Merchant extraction regexes
-    private val merchantPatterns = listOf(
-        Regex("""paid rs\.?\s*[\d,.]+\s+to\s+([a-zA-Z0-9.\-_ &@]+?)(?:\s+at|\s+on|\s+order|\.|\,|$)""", RegexOption.IGNORE_CASE),
-        Regex("""(?:at|towards|spent on)\s+([a-zA-Z0-9.\-_ &@]{3,40}?)(?:\s+on|\s+at|\s+ref|\s+avl|\s+avlbl|\s+bal|\s+upi|\.|\,|$)""", RegexOption.IGNORE_CASE),
-        Regex("""credited to vpa\s+([a-zA-Z0-9.\-_]+@[a-zA-Z0-9]+)""", RegexOption.IGNORE_CASE),
-        Regex("""debited and credited to\s+([a-zA-Z0-9.\-_ ]+)""", RegexOption.IGNORE_CASE),
-        Regex("""transferred to\s+([a-zA-Z0-9.\-_ ]+)""", RegexOption.IGNORE_CASE),
-        Regex("""vpa\s+([a-zA-Z0-9.\-_]+@[a-zA-Z0-9]+)""", RegexOption.IGNORE_CASE),
-        Regex("""at pos\s+([a-zA-Z0-9.\-_ &]+?)(?:\s+ref|\s+avl|\s+bal|\.|\,|$)""", RegexOption.IGNORE_CASE)
-    )
+
 
     fun isNonTransaction(body: String, sender: String = ""): Boolean {
         // 1. Check known spam senders
@@ -118,8 +109,9 @@ object SmsParser {
         // 3. Determine transaction type (Withdrawal vs Deposit)
         val type = determineType(body)
 
-        // 4. Extract merchant / beneficiary for prefilled description
-        val merchant = extractMerchant(body, sms.sender)
+        // 4. Extract sensible description (payee, merchant, or contextual bank detail)
+        val isExpense = type == TransactionType.WITHDRAWAL
+        val description = DescriptionExtractor.extractDescription(body, sms.sender, isExpense)
 
         // 5. Detect payment mode (UPI vs Card vs ATM vs NetBanking)
         val paymentMode = determinePaymentMode(body)
@@ -128,7 +120,7 @@ object SmsParser {
             tags.add(paymentMode)
         }
 
-        DebugLog.log(TAG, "  → Parsed: amount=$amount, type=$type, mode=$paymentMode, merchant=$merchant")
+        DebugLog.log(TAG, "  → Parsed: amount=$amount, type=$type, mode=$paymentMode, desc=$description")
 
         return ParsedTransaction(
             amount = amount,
@@ -136,7 +128,7 @@ object SmsParser {
             rawMessage = body,
             sender = sms.sender,
             timestamp = sms.timestamp,
-            description = merchant,
+            description = description,
             paymentMode = paymentMode,
             selectedTags = tags
         )
@@ -212,19 +204,7 @@ object SmsParser {
         }
     }
 
-    private fun extractMerchant(body: String, sender: String): String {
-        for (pattern in merchantPatterns) {
-            val match = pattern.find(body)
-            if (match != null && match.groupValues.size > 1) {
-                val cand = match.groupValues[1].trim()
-                val lower = cand.lowercase()
-                if (lower !in listOf("a/c", "your", "rs", "inr", "pos", "atm", "the", "an", "account", "vpa", "purchase")) {
-                    return cand.take(40)
-                }
-            }
-        }
-        return if (sender.contains("-")) sender.substringAfter("-") else sender
-    }
+
 
     /**
      * Sample Indian banking SMS messages for testing
