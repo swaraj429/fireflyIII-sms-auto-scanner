@@ -28,8 +28,6 @@
 |:---:|:---:|
 | <img src="docs/ScreenShots/Notification_alert.jpg" width="250" alt="Notification Alert"> | <img src="docs/ScreenShots/Send_result.jpg" width="250" alt="Send Result"> |
 
----
-
 ## ✨ Features
 
 ### 📩 Real-Time SMS Detection
@@ -37,10 +35,27 @@
 - Instantly notifies you when a transaction SMS is detected (Indian banking formats)
 - Notification includes **"⚡ Send to Firefly"** (auto-submit) and **"Review & Edit"** (tap to open)
 
-### 📅 Date-Range SMS Scanning
-- Scan your entire SMS inbox for any custom date range — no 50-message cap
-- Quick-select chips: **Today**, **3 Days**, **7 Days**, **30 Days**, **90 Days**
-- Full Material3 date picker for precise control
+### 📅 Unified Home Screen & Date-Range SMS Scanning
+- Integrated directly into the Home screen with auto-scan on launch
+- Quick-select chips: **This Month**, **Today**, **7 Days**, **30 Days**, **90 Days**
+- Spend and income metrics dynamically re-calculate based on active date range and transaction filters
+
+### 🏷️ Intelligent Payee & Merchant Extraction
+- 15-tier extraction logic resolves human-readable payee/merchant names from major Indian banks (Axis, ICICI, SBI, BOB, HDFC, RBL, etc.)
+- Understands complex patterns: multiline card alerts, UPI credited payees, corporate NEFT salary payouts, FASTag toll plazas, and Simpl PayLater
+- UPI VPA dictionary normalization (`fkrt@ybl` → **Flipkart**, `swiggy@...` → **Swiggy**)
+- Contextual fallback bank names (e.g., `Bank of Baroda Debit (...6818)`)
+- Maps extracted payees directly to Firefly III destination/source accounts for automatic payee creation
+
+### 🚫 Swipe-to-Dismiss & Smart Duplicate Elimination
+- Easily dismiss duplicate bank/UPI alerts or credit card bill payment mirror debits
+- Dismissal reasons tracked with timestamps (`Duplicate Alert`, `Credit Card Bill`, `Promotional/Other`, `Manual Ignore`)
+- Instant Undo via Snackbar and filter toggle to inspect or restore dismissed transactions
+
+### 🧠 Smart Rule-Based Auto-Categorization
+- Create customizable IF/THEN automation rules based on sender, message regex, or amount
+- Automatically assign categories, budgets, accounts, tags, or mark transactions to be ignored
+- Manage rules in the dedicated **Rules** tab
 
 ### 🏦 Abacus-Style Transaction Editor
 Before submitting, enrich each transaction with:
@@ -49,17 +64,12 @@ Before submitting, enrich each transaction with:
 - **🏦 Source Account** — your asset accounts
 - **🏪 Destination Account** — expense/revenue accounts with free-text fallback
 - **🏷️ Tags** — multi-select with checkboxes
-- **Description** — editable, prefilled from SMS text
+- **Description** — prefilled with clean extracted payee, fully editable
 
-### 🔄 Firefly III Metadata Sync
-- One-tap sync of all categories, tags, budgets, and accounts
-- Cached in-session — no repeated API calls while reviewing
-
-### 🧠 Smart Rule-Based Auto-Categorization
-- Create IF/THEN rules to automatically categorize transactions based on SMS keywords
-- Examples: "SWIGGY" → Food & Dining, "UBER" → Transport
-- Rules apply during SMS parsing for instant categorization
-- Manage rules in the dedicated Rules tab
+### 💾 Persistent Local Storage (Room DB)
+- Hash-based deduplication ensures identical SMS messages are never duplicated
+- Tracks sync status (`PENDING`, `SENT`, `FAILED`) across app restarts
+- Automatic 30-day retention pruning keeping storage lightweight
 
 ---
 
@@ -105,7 +115,7 @@ cd firefly-3-sms-auto-scanner
 
 4. **On the Home tab → tap "Sync"** to pull categories, budgets, tags, and accounts
 
-5. **Go to SMS tab → select a date range → tap "📥 Scan SMS"** to load and parse messages
+5. **On the Home tab → select a date filter** (e.g. **This Month**, **Today**) — transactions are automatically scanned, parsed, and displayed with clean payee descriptions
 
 ---
 
@@ -113,25 +123,26 @@ cd firefly-3-sms-auto-scanner
 
 ```
 app/
-├── model/              # Data classes (ParsedTransaction, FireflyModels, SmsMessage)
+├── db/                 # Room Database (FireflyDatabase, SmsRecordEntity, SmsRecordDao)
+├── model/              # Data classes (ParsedTransaction, FireflyModels, ParsingRule, SmsMessage)
 ├── network/            # Retrofit API interface + client builder
-├── parser/             # Regex-based SMS parser (Indian banking formats)
+├── parser/             # SmsParser, DescriptionExtractor (15-tier), RuleEngine, AccountMatcher
 ├── sms/                # SmsReader — ContentResolver queries with date filtering
 ├── notification/       # SmsReceiver (BroadcastReceiver) + NotificationHelper
 ├── prefs/              # SharedPreferences wrapper (AppPrefs)
-├── viewmodel/          # SmsViewModel, TransactionViewModel, SetupViewModel,
-│                       #   FireflyDataViewModel
-├── ui/                 # Compose screens (Home, SMS, Rules, Settings, Debug)
-│                       #   + sheets (TransactionEditor) + components
+├── viewmodel/          # SmsViewModel, SmsHistoryViewModel, RulesViewModel, TransactionViewModel, FireflyDataViewModel
+├── ui/                 # Jetpack Compose UI (HomeScreen, RulesScreen, SettingsScreen)
+│                       #   + sheets (TransactionEditorSheet, DismissReasonSheet) + components
 └── debug/              # DebugLog — in-memory timestamped log
 ```
 
 **Tech stack:**
 - **Kotlin** + **Coroutines** for async work
 - **Jetpack Compose** + **Material3** for UI
+- **Room Database** for persistent local transaction caching & dedup
 - **Retrofit 2** + **OkHttp 4** for Firefly III API calls
-- **Navigation Compose** for screen routing
-- **ViewModel + SharedPreferences** for state & persistence
+- **Navigation Compose** for screen routing (3-tab: Home, Rules, Settings)
+- **ViewModel + SharedPreferences** for state & preferences
 - **BroadcastReceiver** for live SMS interception
 
 ---

@@ -36,12 +36,6 @@ interface SmsRecordDao {
     suspend fun getRecordsSince(cutoffMillis: Long): List<SmsRecordEntity>
 
     /**
-     * Lookup a single record by its hash.
-     */
-    @Query("SELECT * FROM sms_records WHERE smsHash = :hash LIMIT 1")
-    suspend fun findByHash(hash: String): SmsRecordEntity?
-
-    /**
      * Quick check: does a record with this hash already exist?
      */
     @Query("SELECT COUNT(*) FROM sms_records WHERE smsHash = :hash")
@@ -88,6 +82,32 @@ interface SmsRecordDao {
         WHERE smsHash = :hash
     """)
     suspend fun markPending(hash: String, now: Long = System.currentTimeMillis())
+
+    /**
+     * Mark a record as DISMISSED with a specific reason.
+     */
+    @Query("""
+        UPDATE sms_records 
+        SET syncStatus = 'DISMISSED', 
+            dismissReason = :reason,
+            dismissedAt = :now,
+            updatedAt = :now
+        WHERE smsHash = :hash
+    """)
+    suspend fun markDismissed(hash: String, reason: String, now: Long = System.currentTimeMillis())
+
+    /**
+     * Restore a DISMISSED record back to PENDING (e.g. Undo action).
+     */
+    @Query("""
+        UPDATE sms_records 
+        SET syncStatus = 'PENDING', 
+            dismissReason = NULL,
+            dismissedAt = NULL,
+            updatedAt = :now
+        WHERE smsHash = :hash
+    """)
+    suspend fun restoreDismissed(hash: String, now: Long = System.currentTimeMillis())
 
     // ── Cleanup ──────────────────────────────────────────────────────────────
 

@@ -7,8 +7,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import com.swaraj429.firefly3smsscanner.debug.DebugLog
+import com.swaraj429.firefly3smsscanner.model.DismissReason
+import com.swaraj429.firefly3smsscanner.model.FireflyAccount
 import com.swaraj429.firefly3smsscanner.model.ParsedTransaction
+import com.swaraj429.firefly3smsscanner.model.SendStatus
 import com.swaraj429.firefly3smsscanner.model.SmsMessage
+import com.swaraj429.firefly3smsscanner.model.TransactionType
+import com.swaraj429.firefly3smsscanner.parser.AccountMatcher
+import com.swaraj429.firefly3smsscanner.parser.RuleEngine
 import com.swaraj429.firefly3smsscanner.parser.SmsParser
 import com.swaraj429.firefly3smsscanner.sms.SmsReader
 import java.util.*
@@ -22,9 +28,15 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     var statusMessage by mutableStateOf("")
     var usingSampleData by mutableStateOf(false)
 
-    // Date range state — default to last 7 days
+    // Date range state — default to This Month (1st of current month to now)
     var fromDate by mutableStateOf(
-        Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -7) }.timeInMillis
+        Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
     )
     var toDate by mutableStateOf(System.currentTimeMillis())
 
@@ -55,13 +67,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Legacy method kept for backward compatibility
-     */
-    fun loadSms() {
-        loadSmsByDateRange()
-    }
-
     fun loadSampleSms() {
         DebugLog.log(TAG, "Loading sample SMS data for testing...")
 
@@ -82,22 +87,23 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
      *                          to Room with hash-based dedup
      */
     fun parseMessages(
-        accounts: List<com.swaraj429.firefly3smsscanner.model.FireflyAccount> = emptyList(),
+        accounts: List<FireflyAccount> = emptyList(),
         historyViewModel: SmsHistoryViewModel? = null
     ) {
         DebugLog.log(TAG, "Parsing ${smsMessages.size} messages...")
 
         val results = SmsParser.parseAll(smsMessages)
-        val matcher = com.swaraj429.firefly3smsscanner.parser.AccountMatcher()
+        val matcher = AccountMatcher()
 
         results.forEach { txn ->
+            RuleEngine.applyRules(txn, emptyList())
             val match = matcher.findBestMatch(txn.rawMessage, accounts)
             if (match != null) {
                 // Determine source or destination based on transaction type
-                if (txn.effectiveType == com.swaraj429.firefly3smsscanner.model.TransactionType.WITHDRAWAL) {
+                if (txn.effectiveType == TransactionType.WITHDRAWAL) {
                     txn.sourceAccountId = match.account.id
                     txn.sourceAccountName = match.account.name
-                } else if (txn.effectiveType == com.swaraj429.firefly3smsscanner.model.TransactionType.DEPOSIT) {
+                } else if (txn.effectiveType == TransactionType.DEPOSIT) {
                     txn.destinationAccountId = match.account.id
                     txn.destinationAccountName = match.account.name
                 }
@@ -122,7 +128,7 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun addTransactionFromNotification(
         transaction: ParsedTransaction,
-        accounts: List<com.swaraj429.firefly3smsscanner.model.FireflyAccount> = emptyList(),
+        accounts: List<FireflyAccount> = emptyList(),
         historyViewModel: SmsHistoryViewModel? = null
     ): Boolean {
         // Avoid duplicates: same timestamp + amount already in list
@@ -136,13 +142,13 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
         // Perform account matching
         if (accounts.isNotEmpty()) {
-            val matcher = com.swaraj429.firefly3smsscanner.parser.AccountMatcher()
+            val matcher = AccountMatcher()
             val match = matcher.findBestMatch(transaction.rawMessage, accounts)
             if (match != null) {
-                if (transaction.effectiveType == com.swaraj429.firefly3smsscanner.model.TransactionType.WITHDRAWAL) {
+                if (transaction.effectiveType == TransactionType.WITHDRAWAL) {
                     transaction.sourceAccountId = match.account.id
                     transaction.sourceAccountName = match.account.name
-                } else if (transaction.effectiveType == com.swaraj429.firefly3smsscanner.model.TransactionType.DEPOSIT) {
+                } else if (transaction.effectiveType == TransactionType.DEPOSIT) {
                     transaction.destinationAccountId = match.account.id
                     transaction.destinationAccountName = match.account.name
                 }
@@ -158,5 +164,49 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         historyViewModel?.saveTransactions(listOf(transaction))
 
         return true
+    }
+
+    /**
+     * Dismiss a transaction from in-memory parsed transactions list.
+     */
+    fun dismissTransaction(
+        transaction: ParsedTransaction,
+        reason: DismissReason = DismissReason.DUPLICATE,
+        historyViewModel: SmsHistoryViewModel? = null
+    ) {
+        val now = System.currentTimeMillis()
+        transaction.status = SendStatus.DISMISSED
+        transaction.dismissReason = reason
+        transaction.dismissedAt = now
+
+        val idx = parsedTransactions.indexOfFirst {
+            it.sender == transaction.sender && it.rawMessage == transaction.rawMessage
+        }
+        if (idx >= 0) {
+            parsedTransactions[idx] = transaction.copy()
+        }
+
+        historyViewModel?.dismissTransaction(transaction, reason)
+    }
+
+    /**
+     * Restore a dismissed transaction back to PENDING.
+     */
+    fun restoreTransaction(
+        transaction: ParsedTransaction,
+        historyViewModel: SmsHistoryViewModel? = null
+    ) {
+        transaction.status = SendStatus.PENDING
+        transaction.dismissReason = null
+        transaction.dismissedAt = null
+
+        val idx = parsedTransactions.indexOfFirst {
+            it.sender == transaction.sender && it.rawMessage == transaction.rawMessage
+        }
+        if (idx >= 0) {
+            parsedTransactions[idx] = transaction.copy()
+        }
+
+        historyViewModel?.restoreTransaction(transaction)
     }
 }

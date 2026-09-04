@@ -9,6 +9,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.swaraj429.firefly3smsscanner.db.CachedAccount
+import com.swaraj429.firefly3smsscanner.db.CachedBudget
+import com.swaraj429.firefly3smsscanner.db.CachedCategory
+import com.swaraj429.firefly3smsscanner.db.CachedTag
+import com.swaraj429.firefly3smsscanner.db.FireflyDatabase
 import com.swaraj429.firefly3smsscanner.debug.DebugLog
 import com.swaraj429.firefly3smsscanner.model.*
 import com.swaraj429.firefly3smsscanner.network.FireflyApi
@@ -23,7 +28,7 @@ import kotlinx.coroutines.launch
 class FireflyDataViewModel(application: Application) : AndroidViewModel(application) {
     private val TAG = "FireflyDataVM"
     private val prefs = AppPrefs(application)
-    private val dao = com.swaraj429.firefly3smsscanner.db.FireflyDatabase.getDatabase(application).fireflyDao()
+    private val dao = FireflyDatabase.getDatabase(application).fireflyDao()
 
     val categories = mutableStateListOf<FireflyCategory>()
     val tags = mutableStateListOf<FireflyTag>()
@@ -120,7 +125,7 @@ class FireflyDataViewModel(application: Application) : AndroidViewModel(applicat
                 categories.clear()
                 categories.addAll(items)
                 
-                dao.replaceCategories(items.map { com.swaraj429.firefly3smsscanner.db.CachedCategory(it.id, it.name) })
+                dao.replaceCategories(items.map { CachedCategory(it.id, it.name) })
                 DebugLog.log(TAG, "Fetched ${items.size} categories")
             } else {
                 DebugLog.log(TAG, "Categories fetch failed: ${response.code()}")
@@ -140,7 +145,7 @@ class FireflyDataViewModel(application: Application) : AndroidViewModel(applicat
                 tags.clear()
                 tags.addAll(items)
                 
-                dao.replaceTags(items.map { com.swaraj429.firefly3smsscanner.db.CachedTag(it.id, it.name) })
+                dao.replaceTags(items.map { CachedTag(it.id, it.name) })
                 DebugLog.log(TAG, "Fetched ${items.size} tags")
             } else {
                 DebugLog.log(TAG, "Tags fetch failed: ${response.code()}")
@@ -161,7 +166,7 @@ class FireflyDataViewModel(application: Application) : AndroidViewModel(applicat
                 budgets.clear()
                 budgets.addAll(items)
                 
-                dao.replaceBudgets(items.map { com.swaraj429.firefly3smsscanner.db.CachedBudget(it.id, it.name) })
+                dao.replaceBudgets(items.map { CachedBudget(it.id, it.name) })
                 DebugLog.log(TAG, "Fetched ${items.size} active budgets")
             } else {
                 DebugLog.log(TAG, "Budgets fetch failed: ${response.code()}")
@@ -192,7 +197,7 @@ class FireflyDataViewModel(application: Application) : AndroidViewModel(applicat
                 target.addAll(items)
                 
                 dao.replaceAccounts(type, items.map { 
-                    com.swaraj429.firefly3smsscanner.db.CachedAccount(it.id, it.name, it.type, it.accountNumber, it.accountRole) 
+                    CachedAccount(it.id, it.name, it.type, it.accountNumber, it.accountRole) 
                 })
                 DebugLog.log(TAG, "Fetched ${items.size} $type accounts")
             } else {

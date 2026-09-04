@@ -113,11 +113,6 @@ sealed class Screen(
         { Icon(Icons.Filled.Home, "Home") },
         { Icon(Icons.Outlined.Home, "Home") }
     )
-    data object SmsList : Screen(
-        "sms", "SMS",
-        { Icon(Icons.Filled.Sms, "SMS") },
-        { Icon(Icons.Outlined.Sms, "SMS") }
-    )
     data object Rules : Screen(
         "rules", "Rules",
         { Icon(Icons.Filled.AutoAwesome, "Rules") },
@@ -127,11 +122,6 @@ sealed class Screen(
         "settings", "Settings",
         { Icon(Icons.Filled.Settings, "Settings") },
         { Icon(Icons.Outlined.Settings, "Settings") }
-    )
-    data object Debug : Screen(
-        "debug", "Debug",
-        { Icon(Icons.Filled.BugReport, "Debug") },
-        { Icon(Icons.Outlined.BugReport, "Debug") }
     )
 }
 
@@ -149,6 +139,7 @@ fun MainApp(
     val transactionViewModel: TransactionViewModel = viewModel()
     val fireflyDataViewModel: FireflyDataViewModel = viewModel()
     val smsHistoryViewModel: SmsHistoryViewModel = viewModel()
+    val rulesViewModel: RulesViewModel = viewModel()
 
     // SMS permissions (READ + RECEIVE)
     var hasSmsPermission by remember {
@@ -173,7 +164,7 @@ fun MainApp(
         if (hasSmsPermission) {
             DebugLog.log("Permission", "READ_SMS granted ✓")
             Toast.makeText(context, "SMS permission granted!", Toast.LENGTH_SHORT).show()
-            smsViewModel.loadSms()
+            smsViewModel.loadSmsByDateRange()
         } else {
             DebugLog.log("Permission", "READ_SMS denied ✗")
             Toast.makeText(context, "SMS permission denied. Use sample data.", Toast.LENGTH_LONG).show()
@@ -204,11 +195,15 @@ fun MainApp(
             }
         }
 
-        // Auto-scan: set date range to last 30 days, load SMS, parse, and save to history
+        // Auto-scan: set date range to This Month, load SMS, parse, and save to history
         if (hasSmsPermission) {
             val cal = Calendar.getInstance()
             smsViewModel.toDate = cal.timeInMillis
-            cal.add(Calendar.DAY_OF_YEAR, -30)
+            cal.set(Calendar.DAY_OF_MONTH, 1)
+            cal.set(Calendar.HOUR_OF_DAY, 0)
+            cal.set(Calendar.MINUTE, 0)
+            cal.set(Calendar.SECOND, 0)
+            cal.set(Calendar.MILLISECOND, 0)
             smsViewModel.fromDate = cal.timeInMillis
 
             smsViewModel.loadSmsByDateRange()
@@ -263,7 +258,7 @@ fun MainApp(
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    val screens = listOf(Screen.Home, Screen.SmsList, Screen.Rules, Screen.Settings)
+    val screens = listOf(Screen.Home, Screen.Rules, Screen.Settings)
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
@@ -318,15 +313,9 @@ fun MainApp(
                     smsViewModel = smsViewModel,
                     transactionViewModel = transactionViewModel,
                     fireflyDataViewModel = fireflyDataViewModel,
-                    smsHistoryViewModel = smsHistoryViewModel
-                )
-            }
-
-            composable(Screen.SmsList.route) {
-                SmsScreen(
-                    viewModel = smsViewModel,
-                    fireflyDataViewModel = fireflyDataViewModel,
-                    hasPermission = hasSmsPermission,
+                    smsHistoryViewModel = smsHistoryViewModel,
+                    rulesViewModel = rulesViewModel,
+                    hasSmsPermission = hasSmsPermission,
                     onRequestPermission = {
                         permissionLauncher.launch(
                             arrayOf(
@@ -334,20 +323,15 @@ fun MainApp(
                                 Manifest.permission.RECEIVE_SMS
                             )
                         )
-                    },
-                    onNavigateToParsed = {
-                        navController.navigate(Screen.Home.route) {
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    smsHistoryViewModel = smsHistoryViewModel
+                    }
                 )
             }
 
             composable(Screen.Rules.route) {
-                RulesScreen()
+                RulesScreen(
+                    rulesViewModel = rulesViewModel,
+                    fireflyDataViewModel = fireflyDataViewModel
+                )
             }
 
             composable(Screen.Settings.route) {

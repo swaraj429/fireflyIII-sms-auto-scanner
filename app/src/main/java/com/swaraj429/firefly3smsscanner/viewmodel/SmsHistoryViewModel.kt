@@ -10,9 +10,11 @@ import androidx.lifecycle.viewModelScope
 import com.swaraj429.firefly3smsscanner.db.FireflyDatabase
 import com.swaraj429.firefly3smsscanner.db.SmsRecordEntity
 import com.swaraj429.firefly3smsscanner.debug.DebugLog
+import com.swaraj429.firefly3smsscanner.model.DismissReason
 import com.swaraj429.firefly3smsscanner.model.ParsedTransaction
 import com.swaraj429.firefly3smsscanner.model.SendStatus
 import com.swaraj429.firefly3smsscanner.model.TransactionType
+import com.swaraj429.firefly3smsscanner.parser.DescriptionExtractor
 import com.swaraj429.firefly3smsscanner.util.SmsHasher
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -33,9 +35,6 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
     /** All records from the last 30 days, converted to ParsedTransactions. */
     val historyTransactions = mutableStateListOf<ParsedTransaction>()
 
-    /** Raw entities from DB (useful for hash lookups). */
-    private val _entities = mutableListOf<SmsRecordEntity>()
-
     var isLoading by mutableStateOf(false)
     var statusMessage by mutableStateOf("")
 
@@ -43,6 +42,7 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
     var pendingCount by mutableStateOf(0)
     var sentCount by mutableStateOf(0)
     var failedCount by mutableStateOf(0)
+    var dismissedCount by mutableStateOf(0)
     var totalCount by mutableStateOf(0)
 
     init {
@@ -67,8 +67,6 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
 
                 // 2. Fetch surviving records
                 val records = dao.getRecordsSince(cutoff30d)
-                _entities.clear()
-                _entities.addAll(records)
 
                 // 3. Convert to ParsedTransactions for UI
                 historyTransactions.clear()
@@ -78,10 +76,11 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
                 pendingCount = records.count { it.syncStatus == "PENDING" }
                 sentCount = records.count { it.syncStatus == "SENT" }
                 failedCount = records.count { it.syncStatus == "FAILED" }
+                dismissedCount = records.count { it.syncStatus == "DISMISSED" }
                 totalCount = records.size
 
                 statusMessage = "$totalCount records · $pendingCount pending · $sentCount sent"
-                DebugLog.log(TAG, "Loaded $totalCount history records (pending=$pendingCount, sent=$sentCount, failed=$failedCount)")
+                DebugLog.log(TAG, "Loaded $totalCount history records (pending=$pendingCount, sent=$sentCount, failed=$failedCount, dismissed=$dismissedCount)")
             } catch (e: Exception) {
                 statusMessage = "❌ ${e.message}"
                 DebugLog.log(TAG, "Error loading history: ${e.message}")
@@ -94,17 +93,12 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
     /**
      * Persist a list of parsed transactions to the history DB.
      * Duplicates (by hash) are silently ignored.
-     * Returns the number of NEW records actually inserted.
      */
-    fun saveTransactions(transactions: List<ParsedTransaction>): Int {
-        var inserted = 0
+    fun saveTransactions(transactions: List<ParsedTransaction>) {
         viewModelScope.launch {
             try {
                 val entities = transactions.map { it.toEntity() }
                 dao.insertRecords(entities)
-
-                // Count how many were genuinely new
-                inserted = entities.count { dao.existsByHash(it.smsHash) > 0 }
                 DebugLog.log(TAG, "Saved ${entities.size} records (dedup may have skipped some)")
 
                 // Refresh the list
@@ -113,7 +107,6 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
                 DebugLog.log(TAG, "Error saving transactions: ${e.message}")
             }
         }
-        return inserted
     }
 
     /**
@@ -156,11 +149,50 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
-     * Check whether a given SMS already exists in the history.
+     * Mark a transaction as DISMISSED in the DB with a reason.
      */
-    suspend fun alreadyExists(sender: String, body: String): Boolean {
-        val hash = SmsHasher.hash(sender, body)
-        return dao.existsByHash(hash) > 0
+    fun dismissTransaction(
+        transaction: ParsedTransaction,
+        reason: DismissReason = DismissReason.DUPLICATE
+    ) {
+        viewModelScope.launch {
+            try {
+                val hash = SmsHasher.hash(transaction.sender, transaction.rawMessage)
+                val now = System.currentTimeMillis()
+                dao.markDismissed(hash, reason.name, now)
+                transaction.status = SendStatus.DISMISSED
+                transaction.dismissReason = reason
+                transaction.dismissedAt = now
+
+                refreshTransaction(transaction)
+                updateCounts()
+                DebugLog.log(TAG, "Dismissed record: $hash (reason=${reason.name})")
+            } catch (e: Exception) {
+                DebugLog.log(TAG, "Error dismissing record: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Restore a DISMISSED transaction back to PENDING (for undo or manual restoration).
+     */
+    fun restoreTransaction(transaction: ParsedTransaction) {
+        viewModelScope.launch {
+            try {
+                val hash = SmsHasher.hash(transaction.sender, transaction.rawMessage)
+                val now = System.currentTimeMillis()
+                dao.restoreDismissed(hash, now)
+                transaction.status = SendStatus.PENDING
+                transaction.dismissReason = null
+                transaction.dismissedAt = null
+
+                refreshTransaction(transaction)
+                updateCounts()
+                DebugLog.log(TAG, "Restored dismissed record: $hash")
+            } catch (e: Exception) {
+                DebugLog.log(TAG, "Error restoring record: ${e.message}")
+            }
+        }
     }
 
     // ── Internals ────────────────────────────────────────────────────────────
@@ -172,12 +204,23 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun refreshTransactionStatus(hash: String, newStatus: String) {
-        val idx = _entities.indexOfFirst { it.smsHash == hash }
-        if (idx >= 0 && idx < historyTransactions.size) {
-            val old = historyTransactions[idx]
-            historyTransactions[idx] = old.copy(
+        val idx = historyTransactions.indexOfFirst {
+            SmsHasher.hash(it.sender, it.rawMessage) == hash
+        }
+        if (idx >= 0) {
+            historyTransactions[idx] = historyTransactions[idx].copy(
                 status = SendStatus.valueOf(newStatus)
             )
+        }
+    }
+
+    private fun refreshTransaction(transaction: ParsedTransaction) {
+        val hash = SmsHasher.hash(transaction.sender, transaction.rawMessage)
+        val idx = historyTransactions.indexOfFirst {
+            SmsHasher.hash(it.sender, it.rawMessage) == hash
+        }
+        if (idx >= 0) {
+            historyTransactions[idx] = transaction.copy()
         }
     }
 
@@ -187,7 +230,8 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
             pendingCount = dao.countByStatus("PENDING", cutoff)
             sentCount = dao.countByStatus("SENT", cutoff)
             failedCount = dao.countByStatus("FAILED", cutoff)
-            totalCount = pendingCount + sentCount + failedCount
+            dismissedCount = dao.countByStatus("DISMISSED", cutoff)
+            totalCount = pendingCount + sentCount + failedCount + dismissedCount
             statusMessage = "$totalCount records · $pendingCount pending · $sentCount sent"
         }
     }
@@ -210,13 +254,23 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
         } else {
             mutableListOf()
         }
+        val parsedReason = if (!dismissReason.isNullOrBlank()) {
+            DismissReason.fromString(dismissReason)
+        } else null
+
+        val cleanDesc = if (DescriptionExtractor.isRawSenderOrEmpty(description, sender)) {
+            DescriptionExtractor.extractDescription(body, sender, txType == TransactionType.WITHDRAWAL)
+        } else {
+            description
+        }
+
         return ParsedTransaction(
             amount = amount,
             type = txType,
             rawMessage = body,
             sender = sender,
             timestamp = smsTimestamp,
-            description = description,
+            description = cleanDesc,
             status = sendSt,
             sourceAccountId = sourceAccountId,
             sourceAccountName = sourceAccountName,
@@ -225,7 +279,9 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
             categoryName = categoryName,
             budgetId = budgetId,
             budgetName = budgetName,
-            selectedTags = tagList
+            selectedTags = tagList,
+            dismissReason = parsedReason,
+            dismissedAt = dismissedAt
         )
     }
 
@@ -247,7 +303,9 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
             categoryName = categoryName,
             budgetId = budgetId,
             budgetName = budgetName,
-            selectedTagsCommaSeparated = selectedTags.joinToString(",")
+            selectedTagsCommaSeparated = selectedTags.joinToString(","),
+            dismissReason = dismissReason?.name,
+            dismissedAt = dismissedAt
         )
     }
 }

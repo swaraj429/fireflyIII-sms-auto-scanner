@@ -54,7 +54,7 @@ The custom `Application` subclass is registered in `AndroidManifest.xml` via `an
 
 ## Screen Navigation
 
-The app uses **Navigation Compose** with a single bottom navigation bar. Screens are simple destinations — no nested graphs, no deep links (except from the notification).
+The app uses **Navigation Compose** with a single bottom navigation bar. Starting in Alpha 4, the navigation consists of 3 primary tabs: **Home**, **Rules**, and **Settings**. SMS scanning is unified directly into the Home screen.
 
 ![Screen Navigation — State Diagram](Diagrams/Architecture_03.png)
 
@@ -66,7 +66,7 @@ When a transaction notification is tapped:
 2. If the app is **not running** → `MainActivity.onCreate()` is called, which calls `handleNotificationIntent()`
 3. If the app is **already running** → `MainActivity.onNewIntent()` is called, which also calls `handleNotificationIntent()`
 4. `handleNotificationIntent()` reconstructs a `ParsedTransaction` from the extras and stores it in `pendingNotificationTransaction: MutableState<ParsedTransaction?>`
-5. A `LaunchedEffect` in `MainApp()` observes this state — when non-null, it calls `smsViewModel.addTransactionFromNotification(tx)` and navigates to the Transactions tab
+5. A `LaunchedEffect` in `MainApp()` observes this state — when non-null, it calls `smsViewModel.addTransactionFromNotification(tx)` and opens the transaction in the Home tab
 
 This approach avoids any singleton, static variable, or `Intent` passing to a ViewModel (which is an anti-pattern).
 
@@ -74,7 +74,7 @@ This approach avoids any singleton, static variable, or `Intent` passing to a Vi
 
 ## ViewModel Ownership
 
-All ViewModels are created by `viewModel()` in `MainApp()`, which means they're scoped to the **Activity** lifecycle. This is intentional — the same `SmsViewModel` instance is shared across the SMS tab and Transaction tab, so parsed transactions persist through tab navigation.
+All ViewModels are created by `viewModel()` in `MainApp()`, which means they're scoped to the **Activity** lifecycle. This is intentional — ViewModels are shared across screens and composable sheets, so state persists across tab navigation.
 
 ![ViewModel Ownership](Diagrams/Architecture_04.png)
 
@@ -165,11 +165,12 @@ On every `SmsHistoryViewModel.loadHistory()` call:
 1. `DELETE FROM sms_records WHERE smsTimestamp < :30daysAgo`
 2. Then `SELECT * WHERE smsTimestamp >= :30daysAgo ORDER BY smsTimestamp DESC`
 
-### HomeScreen Changes
+### HomeScreen Features
+ 
+The Home tab combines live/scanned SMS analysis and persisted history:
 
-The Home tab now displays the **persisted history** (not just in-memory parsed data) with:
-
-- **Summary banner** showing total spend, income, and status pill counts (Pending/Sent/Failed)
-- **Filter chips**: All / Pending / Sent / Failed
-- **Bulk Send All** for pending transactions
-- If no history exists yet, a prompt directs to the SMS tab
+- **Interactive Summary Banner**: displays real-time total spend, income, and status pill counts (Pending/Sent/Failed/Dismissed)
+- **Embedded Date Range Filter**: quick-select chips (`This Month`, `Today`, `7 Days`, `30 Days`, `90 Days`) that trigger auto-scans and recalculate spend totals
+- **Transaction Filters**: All / Pending / Sent / Failed / Dismissed
+- **Swipe-to-Dismiss**: easily eliminate duplicate alerts or credit card bill debits with undo capability
+- **Bulk Send All**: one-tap sync for all pending transactions in the active range

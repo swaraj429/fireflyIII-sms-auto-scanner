@@ -63,7 +63,9 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
                         sourceId = transaction.sourceAccountId ?: prefs.accountId,
                         destinationId = transaction.destinationAccountId,
                         destinationName = transaction.destinationAccountName
-                            ?: if (transaction.destinationAccountId == null) "SMS Expense" else null,
+                            ?: if (transaction.destinationAccountId == null) {
+                                if (description.isNotBlank() && !description.startsWith("SMS Transaction:")) description else "SMS Expense"
+                            } else null,
                         date = dateStr,
                         notes = "Auto-parsed from SMS:\n${transaction.rawMessage}",
                         categoryName = transaction.categoryName,
@@ -76,7 +78,9 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
                         amount = String.format(Locale.US, "%.2f", transaction.effectiveAmount),
                         sourceId = transaction.sourceAccountId,
                         sourceName = transaction.sourceAccountName
-                            ?: if (transaction.sourceAccountId == null) "SMS Income" else null,
+                            ?: if (transaction.sourceAccountId == null) {
+                                if (description.isNotBlank() && !description.startsWith("SMS Transaction:")) description else "SMS Income"
+                            } else null,
                         destinationId = transaction.destinationAccountId ?: prefs.accountId,
                         date = dateStr,
                         notes = "Auto-parsed from SMS:\n${transaction.rawMessage}",
@@ -101,7 +105,7 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
                         description = description,
                         amount = String.format(Locale.US, "%.2f", transaction.effectiveAmount),
                         sourceId = transaction.sourceAccountId ?: prefs.accountId,
-                        destinationName = "SMS Expense",
+                        destinationName = if (description.isNotBlank() && !description.startsWith("SMS Transaction:")) description else "SMS Expense",
                         date = dateStr,
                         notes = "Auto-parsed from SMS:\n${transaction.rawMessage}",
                         categoryName = transaction.categoryName,

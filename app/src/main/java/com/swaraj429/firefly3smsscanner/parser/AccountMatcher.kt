@@ -25,13 +25,25 @@ data class AccountMatcherConfig(
         "AMAZON PAY" to "Amazon Wallet",
         "PAYTM" to "Paytm Wallet",
         "GPAY" to "Google Pay",
-        "PHONEPE" to "PhonePe"
+        "PHONEPE" to "PhonePe",
+        "SIMPL" to "Simpl",
+        "SLICE" to "Slice"
     ),
     val bankKeywords: Map<String, String> = mapOf(
         "HDFC" to "HDFC",
         "ICICI" to "ICICI",
         "SBI" to "SBI",
-        "AXIS" to "Axis"
+        "AXIS" to "Axis",
+        "RBL" to "RBL",
+        "BOB" to "Bank of Baroda",
+        "BARODA" to "Bank of Baroda",
+        "KOTAK" to "Kotak",
+        "STANCHART" to "Standard Chartered",
+        "SCBANK" to "Standard Chartered",
+        "PNB" to "PNB",
+        "CANARA" to "Canara",
+        "IDBI" to "IDBI",
+        "UNION BANK" to "Union Bank"
     ),
     // Map account alias in SMS to real Firefly account name
     val accountAliases: Map<String, String> = emptyMap()
@@ -44,12 +56,14 @@ data class AccountMatcherConfig(
 class AccountMatcher(private val config: AccountMatcherConfig = AccountMatcherConfig()) {
     private val TAG = "AccountMatcher"
 
-    // Patterns for matching account numbers: e.g., XX1234, **5678, ending 1234, a/c 1234
+    // Patterns for matching account numbers: e.g., XX1234, **5678, ...6818, ending 1234, a/c 1234
     private val accountMaskPatterns = listOf(
         Regex("""[Xx\*]+(\d{2,6})\b"""), // Matches XX1234, ***5678
-        Regex("""(?i)(?:a/c|acct|account)[\s\w]*?(\d{2,6})\b"""), // Matches a/c 1234
-        Regex("""(?i)(?:ending|ends)[\s\w]*?(\d{2,6})\b"""), // Matches ending 1234
-        Regex("""(?i)(?:card|cc)[\s\w]*?(\d{2,6})\b""") // Matches card 1234
+        Regex("""\.\.\.+(\d{2,6})\b"""), // Matches ...6818 (Bank of Baroda)
+        Regex("""(?i)(?:a/c|acct|acc|account)[\s\w.:]*?(\d{2,6})\b"""), // Matches a/c 1234, A/c ...6818
+        Regex("""(?i)(?:ending|ends|ending with|ending in)[\s\w]*?(\d{2,6})\b"""), // Matches ending 1234, ending with 2493
+        Regex("""(?i)(?:card|cc)[\s\w]*?(\d{2,6})\b"""), // Matches card 1234
+        Regex("""(?i)91[Xx*]+(\d{4})\b""") // Matches Paytm phone account 91XX6716
     )
 
     /**

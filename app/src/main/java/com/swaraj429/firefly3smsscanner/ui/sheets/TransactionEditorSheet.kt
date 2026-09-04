@@ -2,6 +2,7 @@ package com.swaraj429.firefly3smsscanner.ui.sheets
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -10,6 +11,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,10 +37,13 @@ fun TransactionEditorSheet(
     transaction: ParsedTransaction,
     fireflyData: FireflyDataViewModel,
     onSave: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onDismissTransaction: ((DismissReason) -> Unit)? = null,
+    onRestoreTransaction: (() -> Unit)? = null
 ) {
     val haptic = LocalHapticFeedback.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showDismissReason by remember { mutableStateOf(false) }
 
     var editAmount by remember(transaction) { mutableStateOf(transaction.effectiveAmount.toString()) }
     var editType by remember(transaction) { mutableStateOf(transaction.effectiveType) }
@@ -324,12 +329,55 @@ fun TransactionEditorSheet(
                         SendStatus.SENDING -> "Saving..."
                         SendStatus.SENT -> "Saved ✓"
                         SendStatus.FAILED -> "Retry"
+                        SendStatus.DISMISSED -> "Save to Firefly"
                     },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
             }
+
+            // ─── Dismiss or Restore Action ───
+            if (transaction.status == SendStatus.DISMISSED && onRestoreTransaction != null) {
+                OutlinedButton(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onRestoreTransaction()
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(Icons.Filled.Restore, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Restore Transaction", fontWeight = FontWeight.SemiBold)
+                }
+            } else if (transaction.status != SendStatus.SENT && onDismissTransaction != null) {
+                OutlinedButton(
+                    onClick = { showDismissReason = true },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorCrimson),
+                    border = BorderStroke(1.dp, ErrorCrimson.copy(alpha = 0.5f))
+                ) {
+                    Icon(Icons.Outlined.DeleteSweep, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Dismiss Transaction", fontWeight = FontWeight.SemiBold)
+                }
+            }
         }
+    }
+
+    // Dismiss Reason Sheet
+    if (showDismissReason) {
+        DismissReasonSheet(
+            transaction = transaction,
+            onConfirm = { reason ->
+                showDismissReason = false
+                onDismissTransaction?.invoke(reason)
+                onDismiss()
+            },
+            onDismiss = { showDismissReason = false }
+        )
     }
 
     // Tag picker dialog

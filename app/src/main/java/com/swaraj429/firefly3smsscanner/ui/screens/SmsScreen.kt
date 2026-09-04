@@ -26,6 +26,7 @@ import java.util.Calendar
 /**
  * Redesigned SMS screen with smart cards, filter chips, and quick-scan.
  */
+@Deprecated("Not wired to navigation. Kept for debug purposes only.")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SmsScreen(
@@ -39,10 +40,6 @@ fun SmsScreen(
     var selectedFilter by remember { mutableStateOf("All") }
     var selectedRange by remember { mutableStateOf("7 Days") }
     var selectedSms by remember { mutableStateOf<SmsMessage?>(null) }
-
-    // Date picker states
-    var showFromPicker by remember { mutableStateOf(false) }
-    var showToPicker by remember { mutableStateOf(false) }
 
     val filters = listOf("All", "Expenses", "Income", "Transfers", "UPI")
     val ranges = listOf("Today" to 0, "3 Days" to 3, "7 Days" to 7, "30 Days" to 30, "90 Days" to 90)
@@ -226,21 +223,4 @@ fun SmsScreen(
         )
     }
 
-    // Date pickers
-    if (showFromPicker) {
-        val pickerState = rememberDatePickerState(initialSelectedDateMillis = viewModel.fromDate)
-        DatePickerDialog(
-            onDismissRequest = { showFromPicker = false },
-            confirmButton = { TextButton(onClick = { pickerState.selectedDateMillis?.let { viewModel.fromDate = it }; showFromPicker = false }) { Text("OK") } },
-            dismissButton = { TextButton(onClick = { showFromPicker = false }) { Text("Cancel") } }
-        ) { DatePicker(state = pickerState) }
-    }
-    if (showToPicker) {
-        val pickerState = rememberDatePickerState(initialSelectedDateMillis = viewModel.toDate)
-        DatePickerDialog(
-            onDismissRequest = { showToPicker = false },
-            confirmButton = { TextButton(onClick = { pickerState.selectedDateMillis?.let { viewModel.toDate = it }; showToPicker = false }) { Text("OK") } },
-            dismissButton = { TextButton(onClick = { showToPicker = false }) { Text("Cancel") } }
-        ) { DatePicker(state = pickerState) }
-    }
 }
