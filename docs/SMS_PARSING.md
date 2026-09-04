@@ -12,24 +12,39 @@ The parser is the heart of the app. This document explains every decision made i
 SmsMessage (sender, body, timestamp)
          │
          ▼
-  extractAmount(body)
-  [3 regex patterns tried in order]
+  isSpamOrNonTransactional(body)
+  [Filters OTPs, promos, balance inquiries]
          │
-         ├── No match or amount ≤ 0 ──────────► return null
-         │                                       (message silently skipped)
+         ├── True ────────────────────────────► return null (silently ignored)
          │
-         └── Amount found
-                  │
-                  ▼
-         determineType(body)
-         [Keyword scanning]
-                  │
-                  ▼
-         ParsedTransaction
-         (amount, type, rawMessage, sender, timestamp)
+         └── False
+                 │
+                 ▼
+          extractAmount(body)
+          [Multi-pattern regex scan]
+                 │
+                 ├── No match or ≤ 0 ────────► return null
+                 │
+                 └── Valid amount
+                         │
+                         ▼
+                  determineType(body)
+                  [Debit vs Credit analysis]
+                         │
+                         ▼
+                  DescriptionExtractor.extractDescription(...)
+                  [15-tier payee & merchant extraction]
+                         │
+                         ▼
+                  determinePaymentMode(body)
+                  [UPI, Card, ATM, NetBanking detection]
+                         │
+                         ▼
+                  ParsedTransaction
+                  (amount, type, description, paymentMode, tags, ...)
 ```
 
-This deliberately simple approach parses approximately 60-70% of Indian banking SMS messages correctly out of the box. It is designed to be extended, not to be a perfect solution.
+This multi-stage pipeline reliably parses transactions across major Indian banks and payment systems, extracting actionable financial metadata while rejecting spam and OTPs.
 
 ---
 
@@ -134,7 +149,7 @@ Here `debited` appears before `credited`, so the type is correctly `DEBIT`.
 When neither debit nor credit keywords are found, `type = TransactionType.UNKNOWN`. This is:
 - Displayed as `⚪` in the UI
 - Submitted to Firefly as `withdrawal` by default (see `toFireflyType()`)
-- Correctable by the user via the type toggle chips in `TransactionScreen`
+- Correctable by the user via the type toggle chips in `TransactionEditorSheet`
 
 ---
 
@@ -220,14 +235,47 @@ SmsMessage(
 
 ---
 
-## Known Limitations
+## Step 3: Payee & Description Extraction (`DescriptionExtractor.kt`)
 
-| Limitation | Impact |
-|---|---|
-| Only processes the **first** amount found in the body | Rare: balance-included messages might match the wrong number |
-| Keyword matching is greedy | "not debited" would still match "debited" |
-| Indian formats only | No support for USD, EUR, GBP or non-Indian bank patterns |
-| No OTP / marketing filter | Some OTPs containing amounts will be parsed as transactions |
-| No duplicate detection | Same SMS scanned twice = two `ParsedTransaction` objects |
+Extracted descriptions are resolved via `DescriptionExtractor.extractDescription(body, sender, isExpense)`. Instead of falling back to cryptic bank sender IDs like `BOBTXN` or `ICICIT`, it executes a 15-tier extraction hierarchy:
 
-These are tracked as issues/roadmap items and are excellent first contribution targets.
+1. **Multiline Card Spends (e.g. Axis Bank)**: Extracts merchant from the line between timestamp and `Avl Limit` (e.g., `Zepto`, `Hare Krishn`).
+2. **Card Info Field (e.g. ICICI Bank)**: Matches `Info: IND*<Merchant>`.
+3. **Payee Credited (e.g. UPI Debits)**: Parses `<Payee> credited` from debits.
+4. **Sender Credited (e.g. UPI Credits)**: Parses `from <Payer>` or `by account linked to UPI id <Payer>`.
+5. **Card Spend at Merchant (e.g. SBI Card)**: Matches `spent on your ... Card ... at <Merchant>`.
+6. **Wallet Payee (e.g. Paytm)**: Matches `paid to <Payee>`.
+7. **FASTag Plazas**: Captures toll plaza name (`at <Plaza> Toll Plaza`).
+8. **Simpl / PayLater**: Captures merchant name (`at <Merchant> using Simpl`).
+9. **Salary / Corporate NEFT**: Extracts employer from `Info NEFT-...-<Employer>`.
+10. **Credit Card Bill Payments**: Formats as `<Bank> Card Bill Payment`.
+11. **Systematic Debits / SIP**: Formats as `SIP - <Fund Name>`.
+12. **ATM Withdrawals**: Formats as `ATM Cash Withdrawal`.
+13. **UPI VPA Resolution**: Normalizes known merchant dictionaries (`fkrt@ybl` → **Flipkart**, `swiggy@...` → **Swiggy**) and cleans personal UPI handles.
+14. **General Preposition Matches**: Extracts payees following `to `, `at `, or preceding `credited`.
+15. **Contextual Fallback**: Formats as `<Bank Name> Debit/Credit (...<Last 4 digits>)` using bank sender mapping and masked account numbers.
+
+---
+
+## Step 4: Payment Mode Detection
+
+`determinePaymentMode(body)` automatically tags transactions:
+- **UPI** — detects VPA, UPI references, `@upi`, `@okaxis`, etc.
+- **Card** — credit / debit card spends
+- **ATM** — cash withdrawals
+- **NetBanking** — NEFT, IMPS, RTGS transfers
+- **FASTag** — toll deductions
+
+---
+
+## Known Limitations & Progress
+
+| Feature / Limitation | Status | Notes |
+|---|---|---|
+| First amount priority | Active | Balance-included messages might match the wrong number in rare cases |
+| Keyword matching is greedy | Active | "not debited" could still match "debited" |
+| Indian formats only | Active | Optimized for Indian banking (INR/₹) |
+| OTP / marketing spam filter | ✅ **Resolved in Alpha 4** | `isSpamOrNonTransactional` filters out promotional texts, OTPs, and balance alerts |
+| Duplicate detection | ✅ **Resolved in Alpha 4** | Room DB hash-based deduplication + Swipe-to-Dismiss for duplicate alerts |
+| Payee / merchant extraction | ✅ **Resolved in Alpha 4** | 15-tier `DescriptionExtractor` resolves clean merchants and payees |
+
