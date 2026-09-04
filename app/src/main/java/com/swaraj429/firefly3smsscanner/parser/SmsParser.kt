@@ -6,81 +6,175 @@ import com.swaraj429.firefly3smsscanner.model.SmsMessage
 import com.swaraj429.firefly3smsscanner.model.TransactionType
 
 /**
- * Regex-based SMS parser for Indian banking messages.
- * Deliberately kept simple — handles ~60-70% of common formats.
+ * Advanced Regex-based SMS parser for Indian banking & payment messages.
+ * Handles UPI, Credit Cards, Netbanking, Wallets (Paytm, Simpl, Slice),
+ * NEFT, IMPS, ATM, POS, and auto-filters OTP/spam/bill reminders.
  */
 object SmsParser {
     private const val TAG = "SmsParser"
 
-    // Amount patterns (handles Rs, INR, Rs., ₹)
+    // Amount patterns (handles Rs, INR, Rs., ₹, with commas and decimals)
     private val amountPatterns = listOf(
-        Regex("""(?:Rs\.?|INR|₹)\s*([\d,]+\.?\d*)""", RegexOption.IGNORE_CASE),
-        Regex("""([\d,]+\.?\d*)\s*(?:Rs\.?|INR|₹)""", RegexOption.IGNORE_CASE),
-        Regex("""(?:amount|amt)\s*(?:of\s*)?(?:Rs\.?|INR|₹)?\s*([\d,]+\.?\d*)""", RegexOption.IGNORE_CASE),
+        Regex("""(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
+        Regex("""([\d,]+(?:\.\d{1,2})?)\s*(?:Rs\.?|INR|₹)""", RegexOption.IGNORE_CASE),
+        Regex("""(?:amount|amt|debited by|credited by|debited for|credited for)\s*(?:of\s*)?(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
+        Regex("""(?:for\s+)(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
+        Regex("""(?:paid|spent|transferred)\s+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE)
+    )
+
+    // Known spam shortcodes
+    private val spamSenders = listOf("55256", "50404", "55315", "53111", "55111")
+
+    // Non-transaction discard patterns (collect requests, broker balance reports, limit updates, bill reminders, OTPs, promotional loan ads)
+    private val discardPatterns = listOf(
+        Regex("""\b(otp|verification code|secret code|one time password|passcode|auth code|verification pin)\b""", RegexOption.IGNORE_CASE),
+        Regex("""reported your (fund balance|securities balance|collateral)""", RegexOption.IGNORE_CASE),
+        Regex("""(limit has been updated|changed the spend limit|spend limit on your|contactless transaction limit|credit limit increase)""", RegexOption.IGNORE_CASE),
+        Regex("""(has requested money|request to pay|requested payment|mandate request|on approving.*will be debited)""", RegexOption.IGNORE_CASE),
+        Regex("""(you have setup a recurring payment|mandate created|standing instruction.*registered)""", RegexOption.IGNORE_CASE),
+        Regex("""(regret to inform you|could not be processed|txn failed|unsuccessful|transaction failed)""", RegexOption.IGNORE_CASE),
+        Regex("""(energy bill for cons|bill of rs\.?\s*[\d,]+(?:\.\d+)? is due|bill is pending|total amt due|minimum amt due|statement generated|payment is due on|to avoid late fee)""", RegexOption.IGNORE_CASE),
+        Regex("""(pre-approved|preapproved|loan up to|apply now|borrow on mpokket|borrow rs|open axis bank ekyc|amazon voucher\*|welcome bonus|disconnection at a charge|जीतें|जिंका|कहाँ है\?|कुठे आहे\?|ecash to your account|games bonus|play your favourite games|maintain an amb|average monthly balance|call_chrg:|call_durn:|as per income tax provision)""", RegexOption.IGNORE_CASE)
     )
 
     // Debit keywords
     private val debitKeywords = listOf(
         "debited", "deducted", "withdrawn", "sent", "paid",
         "purchase", "spent", "debit", "transferred", "txn of",
-        "payment of", "charged"
+        "payment of", "charged", "debited from", "debited to"
     )
 
     // Credit keywords
     private val creditKeywords = listOf(
         "credited", "received", "deposited", "refund", "cashback",
-        "credit", "reversed", "added"
+        "credit", "reversed", "reversal", "added", "credited to",
+        "credited from", "has been received"
     )
 
-    // Sender patterns that are typically banks
-    private val bankSenderPatterns = listOf(
-        Regex("""^[A-Z]{2}-[A-Z]+"""), // e.g., VD-HDFCBK, AD-SBIINB
-        Regex("""^[A-Z]{6,}"""),         // e.g., HDFCBK
+    // Merchant extraction regexes
+    private val merchantPatterns = listOf(
+        Regex("""paid rs\.?\s*[\d,.]+\s+to\s+([a-zA-Z0-9.\-_ &@]+?)(?:\s+at|\s+on|\s+order|\.|\,|$)""", RegexOption.IGNORE_CASE),
+        Regex("""(?:at|towards|spent on)\s+([a-zA-Z0-9.\-_ &@]{3,40}?)(?:\s+on|\s+at|\s+ref|\s+avl|\s+avlbl|\s+bal|\s+upi|\.|\,|$)""", RegexOption.IGNORE_CASE),
+        Regex("""credited to vpa\s+([a-zA-Z0-9.\-_]+@[a-zA-Z0-9]+)""", RegexOption.IGNORE_CASE),
+        Regex("""debited and credited to\s+([a-zA-Z0-9.\-_ ]+)""", RegexOption.IGNORE_CASE),
+        Regex("""transferred to\s+([a-zA-Z0-9.\-_ ]+)""", RegexOption.IGNORE_CASE),
+        Regex("""vpa\s+([a-zA-Z0-9.\-_]+@[a-zA-Z0-9]+)""", RegexOption.IGNORE_CASE),
+        Regex("""at pos\s+([a-zA-Z0-9.\-_ &]+?)(?:\s+ref|\s+avl|\s+bal|\.|\,|$)""", RegexOption.IGNORE_CASE)
     )
+
+    fun isNonTransaction(body: String, sender: String = ""): Boolean {
+        // 1. Check known spam senders
+        if (spamSenders.any { sender.contains(it) }) {
+            return true
+        }
+
+        val lowerBody = body.lowercase()
+        val isConfirmedPayment = lowerBody.contains("debited") ||
+                lowerBody.contains("credited") ||
+                lowerBody.contains("spent on") ||
+                lowerBody.contains("transaction of inr") ||
+                lowerBody.contains("transaction of rs") ||
+                lowerBody.contains("paid rs.") ||
+                lowerBody.contains("paid inr") ||
+                lowerBody.contains("repayment was a success") ||
+                lowerBody.contains("sent via upi")
+
+        for (pattern in discardPatterns) {
+            if (pattern.containsMatchIn(body)) {
+                if (lowerBody.contains("otp") ||
+                    lowerBody.contains("secret code") ||
+                    lowerBody.contains("requested money") ||
+                    lowerBody.contains("on approving") ||
+                    lowerBody.contains("reported your fund balance") ||
+                    lowerBody.contains("limit has been updated") ||
+                    lowerBody.contains("could not be processed")) {
+                    return true
+                }
+                if (!isConfirmedPayment) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
 
     fun parse(sms: SmsMessage): ParsedTransaction? {
         val body = sms.body
         DebugLog.log(TAG, "Parsing: ${body.take(80)}...")
 
-        // 1. Extract amount
+        // 1. Filter out non-transactional messages / spam
+        if (isNonTransaction(body, sms.sender)) {
+            DebugLog.log(TAG, "  → Non-transaction / spam discarded")
+            return null
+        }
+
+        // 2. Extract amount
         val amount = extractAmount(body)
         if (amount == null || amount <= 0) {
             DebugLog.log(TAG, "  → No valid amount found, skipping")
             return null
         }
 
-        // 2. Determine type
+        // 3. Determine transaction type (Withdrawal vs Deposit)
         val type = determineType(body)
 
-        DebugLog.log(TAG, "  → Parsed: amount=$amount, type=$type")
+        // 4. Extract merchant / beneficiary for prefilled description
+        val merchant = extractMerchant(body, sms.sender)
+
+        // 5. Detect payment mode (UPI vs Card vs ATM vs NetBanking)
+        val paymentMode = determinePaymentMode(body)
+        val tags = mutableListOf<String>()
+        if (paymentMode != null) {
+            tags.add(paymentMode)
+        }
+
+        DebugLog.log(TAG, "  → Parsed: amount=$amount, type=$type, mode=$paymentMode, merchant=$merchant")
 
         return ParsedTransaction(
             amount = amount,
             type = type,
             rawMessage = body,
             sender = sms.sender,
-            timestamp = sms.timestamp
+            timestamp = sms.timestamp,
+            description = merchant,
+            paymentMode = paymentMode,
+            selectedTags = tags
         )
     }
 
     fun parseAll(messages: List<SmsMessage>): List<ParsedTransaction> {
         DebugLog.log(TAG, "Parsing ${messages.size} messages...")
-
         val results = messages.mapNotNull { parse(it) }
-
         DebugLog.log(TAG, "Successfully parsed ${results.size}/${messages.size} messages")
         return results
+    }
+
+    private fun determinePaymentMode(body: String): String? {
+        val lower = body.lowercase()
+        return when {
+            lower.contains("upi") || lower.contains("vpa") || lower.contains("@ok") ||
+            lower.contains("@paytm") || lower.contains("@ybl") || lower.contains("@axis") ||
+            lower.contains("@icici") || lower.contains("@barodampay") || lower.contains("pingpay") -> "UPI"
+
+            lower.contains("credit card") || lower.contains("debit card") || lower.contains("card") ||
+            lower.contains("pos ") || lower.contains("ending ") || lower.contains("spent on") -> "Card"
+
+            lower.contains("atm") || lower.contains("cash withdrawal") -> "ATM"
+
+            lower.contains("neft") || lower.contains("imps") || lower.contains("rtgs") -> "NetBanking"
+
+            else -> null
+        }
     }
 
     private fun extractAmount(body: String): Double? {
         for (pattern in amountPatterns) {
             val match = pattern.find(body)
-            if (match != null) {
+            if (match != null && match.groupValues.size > 1) {
                 val rawAmount = match.groupValues[1].replace(",", "")
                 try {
                     val amount = rawAmount.toDouble()
                     if (amount > 0) {
-                        DebugLog.log(TAG, "  → Amount matched by pattern: ${pattern.pattern}")
                         return amount
                     }
                 } catch (e: NumberFormatException) {
@@ -101,7 +195,7 @@ object SmsParser {
             hasDebit && !hasCredit -> TransactionType.WITHDRAWAL
             hasCredit && !hasDebit -> TransactionType.DEPOSIT
             hasDebit && hasCredit -> {
-                // Both present — use position (first keyword wins)
+                // Both present — first keyword wins
                 val debitPos = debitKeywords.mapNotNull {
                     val idx = lowerBody.indexOf(it)
                     if (idx >= 0) idx else null
@@ -114,8 +208,22 @@ object SmsParser {
 
                 if (debitPos < creditPos) TransactionType.WITHDRAWAL else TransactionType.DEPOSIT
             }
-            else -> TransactionType.WITHDRAWAL  // default to expense
+            else -> TransactionType.WITHDRAWAL
         }
+    }
+
+    private fun extractMerchant(body: String, sender: String): String {
+        for (pattern in merchantPatterns) {
+            val match = pattern.find(body)
+            if (match != null && match.groupValues.size > 1) {
+                val cand = match.groupValues[1].trim()
+                val lower = cand.lowercase()
+                if (lower !in listOf("a/c", "your", "rs", "inr", "pos", "atm", "the", "an", "account", "vpa", "purchase")) {
+                    return cand.take(40)
+                }
+            }
+        }
+        return if (sender.contains("-")) sender.substringAfter("-") else sender
     }
 
     /**
@@ -181,6 +289,6 @@ object SmsParser {
             body = "INR 12,000.00 transferred from your IDBI A/c XX2345 to XXXXX6789 on 06-Jan-25. Avl bal: INR 8,500.00",
             timestamp = System.currentTimeMillis() - 777600000,
             dateString = "06/01/2025 17:45"
-        ),
+        )
     )
 }

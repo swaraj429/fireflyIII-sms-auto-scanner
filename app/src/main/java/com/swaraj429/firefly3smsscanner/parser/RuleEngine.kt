@@ -8,31 +8,32 @@ import com.swaraj429.firefly3smsscanner.model.ParsingRule
  * Rule Engine — matches SMS content against user-defined rules and
  * fills transaction metadata (category, destination account, tags).
  *
- * Rules are evaluated in order; **all matching rules accumulate** so
- * that a keyword "SWIGGY" can set category while "UPI" can add tags.
- * The FIRST match for each field wins (category, account).
- * Tags are merged from all matches.
+ * Built-in auto-categorization is disabled per configuration so that
+ * Firefly III rules handle categorization on the server side.
+ * User-defined custom rules in the Rules tab are evaluated in order.
  */
 object RuleEngine {
     private const val TAG = "RuleEngine"
 
     /**
-     * Apply all matching rules to a [ParsedTransaction].
+     * Apply all matching user rules to a [ParsedTransaction].
      * Only fills fields that are currently empty/null — never overrides
      * user-provided or auto-detected values.
      *
      * @return true if at least one rule matched
      */
     fun applyRules(transaction: ParsedTransaction, rules: List<ParsingRule>): Boolean {
-        val body = transaction.rawMessage.uppercase()
+        val raw = transaction.rawMessage
+        val upperBody = raw.uppercase()
         var matched = false
 
+        // User defined rules take highest priority
         for (rule in rules) {
             if (!rule.isEnabled) continue
             if (rule.keyword.isBlank()) continue
-            if (!body.contains(rule.keyword.uppercase())) continue
+            if (!upperBody.contains(rule.keyword.uppercase())) continue
 
-            DebugLog.log(TAG, "Rule matched: \"${rule.keyword}\" → cat=${rule.categoryName}, dest=${rule.destinationAccountName}, tags=${rule.tags}")
+            DebugLog.log(TAG, "User rule matched: \"${rule.keyword}\" → cat=${rule.categoryName}, dest=${rule.destinationAccountName}, tags=${rule.tags}")
             matched = true
 
             // Category — first match wins
@@ -55,7 +56,7 @@ object RuleEngine {
         }
 
         if (!matched) {
-            DebugLog.log(TAG, "No rules matched for: ${transaction.rawMessage.take(40)}...")
+            DebugLog.log(TAG, "No user rules matched for: ${transaction.rawMessage.take(40)}...")
         }
 
         return matched

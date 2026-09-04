@@ -33,9 +33,6 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
     /** All records from the last 30 days, converted to ParsedTransactions. */
     val historyTransactions = mutableStateListOf<ParsedTransaction>()
 
-    /** Raw entities from DB (useful for hash lookups). */
-    private val _entities = mutableListOf<SmsRecordEntity>()
-
     var isLoading by mutableStateOf(false)
     var statusMessage by mutableStateOf("")
 
@@ -67,8 +64,6 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
 
                 // 2. Fetch surviving records
                 val records = dao.getRecordsSince(cutoff30d)
-                _entities.clear()
-                _entities.addAll(records)
 
                 // 3. Convert to ParsedTransactions for UI
                 historyTransactions.clear()
@@ -94,17 +89,12 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
     /**
      * Persist a list of parsed transactions to the history DB.
      * Duplicates (by hash) are silently ignored.
-     * Returns the number of NEW records actually inserted.
      */
-    fun saveTransactions(transactions: List<ParsedTransaction>): Int {
-        var inserted = 0
+    fun saveTransactions(transactions: List<ParsedTransaction>) {
         viewModelScope.launch {
             try {
                 val entities = transactions.map { it.toEntity() }
                 dao.insertRecords(entities)
-
-                // Count how many were genuinely new
-                inserted = entities.count { dao.existsByHash(it.smsHash) > 0 }
                 DebugLog.log(TAG, "Saved ${entities.size} records (dedup may have skipped some)")
 
                 // Refresh the list
@@ -113,7 +103,6 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
                 DebugLog.log(TAG, "Error saving transactions: ${e.message}")
             }
         }
-        return inserted
     }
 
     /**
@@ -155,13 +144,6 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /**
-     * Check whether a given SMS already exists in the history.
-     */
-    suspend fun alreadyExists(sender: String, body: String): Boolean {
-        val hash = SmsHasher.hash(sender, body)
-        return dao.existsByHash(hash) > 0
-    }
 
     // ── Internals ────────────────────────────────────────────────────────────
 
@@ -172,10 +154,11 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun refreshTransactionStatus(hash: String, newStatus: String) {
-        val idx = _entities.indexOfFirst { it.smsHash == hash }
-        if (idx >= 0 && idx < historyTransactions.size) {
-            val old = historyTransactions[idx]
-            historyTransactions[idx] = old.copy(
+        val idx = historyTransactions.indexOfFirst {
+            SmsHasher.hash(it.sender, it.rawMessage) == hash
+        }
+        if (idx >= 0) {
+            historyTransactions[idx] = historyTransactions[idx].copy(
                 status = SendStatus.valueOf(newStatus)
             )
         }

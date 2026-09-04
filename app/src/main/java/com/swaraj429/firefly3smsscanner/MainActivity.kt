@@ -128,11 +128,6 @@ sealed class Screen(
         { Icon(Icons.Filled.Settings, "Settings") },
         { Icon(Icons.Outlined.Settings, "Settings") }
     )
-    data object Debug : Screen(
-        "debug", "Debug",
-        { Icon(Icons.Filled.BugReport, "Debug") },
-        { Icon(Icons.Outlined.BugReport, "Debug") }
-    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -174,7 +169,7 @@ fun MainApp(
         if (hasSmsPermission) {
             DebugLog.log("Permission", "READ_SMS granted ✓")
             Toast.makeText(context, "SMS permission granted!", Toast.LENGTH_SHORT).show()
-            smsViewModel.loadSms()
+            smsViewModel.loadSmsByDateRange()
         } else {
             DebugLog.log("Permission", "READ_SMS denied ✗")
             Toast.makeText(context, "SMS permission denied. Use sample data.", Toast.LENGTH_LONG).show()

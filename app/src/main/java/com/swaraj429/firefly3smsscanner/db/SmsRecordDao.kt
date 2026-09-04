@@ -36,12 +36,6 @@ interface SmsRecordDao {
     suspend fun getRecordsSince(cutoffMillis: Long): List<SmsRecordEntity>
 
     /**
-     * Lookup a single record by its hash.
-     */
-    @Query("SELECT * FROM sms_records WHERE smsHash = :hash LIMIT 1")
-    suspend fun findByHash(hash: String): SmsRecordEntity?
-
-    /**
      * Quick check: does a record with this hash already exist?
      */
     @Query("SELECT COUNT(*) FROM sms_records WHERE smsHash = :hash")

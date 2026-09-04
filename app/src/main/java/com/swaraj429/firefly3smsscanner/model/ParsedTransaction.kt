@@ -9,6 +9,8 @@ data class ParsedTransaction(
     val rawMessage: String,
     val sender: String = "",
     val timestamp: Long = System.currentTimeMillis(),
+    // Payment mode (e.g. "UPI", "Card", "ATM", "NetBanking")
+    var paymentMode: String? = null,
     // Mutable for user corrections
     var correctedAmount: Double? = null,
     var correctedType: TransactionType? = null,

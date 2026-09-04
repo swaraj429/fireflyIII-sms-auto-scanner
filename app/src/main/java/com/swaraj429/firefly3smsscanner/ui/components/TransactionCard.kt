@@ -139,8 +139,26 @@ fun TransactionCard(
                             modifier = Modifier.weight(1f, fill = false)
                         )
                     }
-                    if (transaction.categoryName != null) {
+                    // Payment mode badge (UPI / Card / ATM / NetBanking)
+                    val mode = transaction.paymentMode
+                    if (mode != null) {
                         if (accountName != null) {
+                            Text(
+                                text = " · ",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = mode,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1
+                        )
+                    }
+                    if (transaction.categoryName != null) {
+                        if (accountName != null || mode != null) {
                             Text(
                                 text = " · ",
                                 style = MaterialTheme.typography.bodySmall,
