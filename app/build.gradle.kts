@@ -12,8 +12,8 @@ android {
         applicationId = "com.swaraj429.firefly3smsscanner"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "0.0.3-alpha"
+        versionCode = 5
+        versionName = "0.0.5-alpha"
     }
 
     buildTypes {
