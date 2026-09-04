@@ -7,8 +7,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import com.swaraj429.firefly3smsscanner.debug.DebugLog
+import com.swaraj429.firefly3smsscanner.model.DismissReason
 import com.swaraj429.firefly3smsscanner.model.FireflyAccount
 import com.swaraj429.firefly3smsscanner.model.ParsedTransaction
+import com.swaraj429.firefly3smsscanner.model.SendStatus
 import com.swaraj429.firefly3smsscanner.model.SmsMessage
 import com.swaraj429.firefly3smsscanner.model.TransactionType
 import com.swaraj429.firefly3smsscanner.parser.AccountMatcher
@@ -156,5 +158,49 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         historyViewModel?.saveTransactions(listOf(transaction))
 
         return true
+    }
+
+    /**
+     * Dismiss a transaction from in-memory parsed transactions list.
+     */
+    fun dismissTransaction(
+        transaction: ParsedTransaction,
+        reason: DismissReason = DismissReason.DUPLICATE,
+        historyViewModel: SmsHistoryViewModel? = null
+    ) {
+        val now = System.currentTimeMillis()
+        transaction.status = SendStatus.DISMISSED
+        transaction.dismissReason = reason
+        transaction.dismissedAt = now
+
+        val idx = parsedTransactions.indexOfFirst {
+            it.sender == transaction.sender && it.rawMessage == transaction.rawMessage
+        }
+        if (idx >= 0) {
+            parsedTransactions[idx] = transaction.copy()
+        }
+
+        historyViewModel?.dismissTransaction(transaction, reason)
+    }
+
+    /**
+     * Restore a dismissed transaction back to PENDING.
+     */
+    fun restoreTransaction(
+        transaction: ParsedTransaction,
+        historyViewModel: SmsHistoryViewModel? = null
+    ) {
+        transaction.status = SendStatus.PENDING
+        transaction.dismissReason = null
+        transaction.dismissedAt = null
+
+        val idx = parsedTransactions.indexOfFirst {
+            it.sender == transaction.sender && it.rawMessage == transaction.rawMessage
+        }
+        if (idx >= 0) {
+            parsedTransactions[idx] = transaction.copy()
+        }
+
+        historyViewModel?.restoreTransaction(transaction)
     }
 }

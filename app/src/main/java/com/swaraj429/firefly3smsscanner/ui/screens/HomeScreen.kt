@@ -18,12 +18,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.swaraj429.firefly3smsscanner.model.DismissReason
 import com.swaraj429.firefly3smsscanner.model.ParsedTransaction
 import com.swaraj429.firefly3smsscanner.model.SendStatus
 import com.swaraj429.firefly3smsscanner.model.TransactionType
 import com.swaraj429.firefly3smsscanner.ui.components.*
+import com.swaraj429.firefly3smsscanner.ui.sheets.DismissReasonSheet
 import com.swaraj429.firefly3smsscanner.ui.sheets.TransactionEditorSheet
 import com.swaraj429.firefly3smsscanner.ui.theme.*
 import com.swaraj429.firefly3smsscanner.viewmodel.FireflyDataViewModel
@@ -33,14 +36,16 @@ import com.swaraj429.firefly3smsscanner.viewmodel.TransactionViewModel
 import com.swaraj429.firefly3smsscanner.viewmodel.RulesViewModel
 import com.swaraj429.firefly3smsscanner.parser.RuleEngine
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 
 /**
  * Home/Transactions screen that shows all SMS transaction records from the
- * last 30 days with their sync status (Pending / Sent / Failed).
+ * last 30 days with their sync status (Pending / Sent / Failed / Dismissed).
  *
  * On first composition it loads the persisted history from Room and merges
  * in any freshly-parsed transactions from SmsViewModel.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     smsViewModel: SmsViewModel,
@@ -50,9 +55,13 @@ fun HomeScreen(
     rulesViewModel: RulesViewModel = viewModel()
 ) {
     var selectedTransaction by remember { mutableStateOf<ParsedTransaction?>(null) }
+    var transactionToDismiss by remember { mutableStateOf<ParsedTransaction?>(null) }
     var selectedFilter by remember { mutableStateOf("All") }
 
-    val filters = listOf("All", "Pending", "Sent", "Failed")
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    val filters = listOf("All", "Pending", "Sent", "Failed", "Dismissed")
 
     // Decide data source: prefer the persisted history; fall back to in-memory parsed
     val historyList = smsHistoryViewModel.historyTransactions
@@ -64,21 +73,27 @@ fun HomeScreen(
             "Pending" -> txn.status == SendStatus.PENDING
             "Sent" -> txn.status == SendStatus.SENT
             "Failed" -> txn.status == SendStatus.FAILED
-            else -> true
+            "Dismissed" -> txn.status == SendStatus.DISMISSED
+            else -> txn.status != SendStatus.DISMISSED // "All" excludes dismissed
         }
     }
 
     val pendingCount = transactions.count { it.status == SendStatus.PENDING }
     val sentCount = transactions.count { it.status == SendStatus.SENT }
     val failedCount = transactions.count { it.status == SendStatus.FAILED }
+    val dismissedCount = transactions.count { it.status == SendStatus.DISMISSED }
+    val activeCount = transactions.count { it.status != SendStatus.DISMISSED }
+
+    // Dismissed transactions are excluded from totals
     val totalSpend = transactions
-        .filter { it.effectiveType == TransactionType.WITHDRAWAL && it.status != SendStatus.FAILED }
+        .filter { it.effectiveType == TransactionType.WITHDRAWAL && it.status != SendStatus.FAILED && it.status != SendStatus.DISMISSED }
         .sumOf { it.effectiveAmount }
     val totalIncome = transactions
-        .filter { it.effectiveType == TransactionType.DEPOSIT && it.status != SendStatus.FAILED }
+        .filter { it.effectiveType == TransactionType.DEPOSIT && it.status != SendStatus.FAILED && it.status != SendStatus.DISMISSED }
         .sumOf { it.effectiveAmount }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
         // ─── Summary Banner ───
         if (transactions.isNotEmpty()) {
             Card(
@@ -154,6 +169,15 @@ fun HomeScreen(
                                 modifier = Modifier.weight(1f)
                             )
                         }
+                        if (dismissedCount > 0) {
+                            StatusPill(
+                                count = dismissedCount,
+                                label = "Dismissed",
+                                color = MaterialTheme.colorScheme.outline,
+                                icon = Icons.Filled.Block,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
             }
@@ -200,7 +224,8 @@ fun HomeScreen(
                     "Pending" -> pendingCount
                     "Sent" -> sentCount
                     "Failed" -> failedCount
-                    else -> transactions.size
+                    "Dismissed" -> dismissedCount
+                    else -> activeCount
                 }
                 FilterChip(
                     selected = selectedFilter == filter,
@@ -275,17 +300,91 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 grouped.forEach { (dateLabel, txns) ->
-                    item { DateSectionHeader(dateLabel) }
-                    itemsIndexed(txns) { _, txn ->
-                        TransactionCard(
-                            transaction = txn,
-                            onClick = { selectedTransaction = txn }
-                        )
+                    item(key = "header_$dateLabel") { DateSectionHeader(dateLabel) }
+                    itemsIndexed(txns, key = { _, txn -> "${txn.sender}_${txn.timestamp}_${txn.effectiveAmount}" }) { _, txn ->
+                        if (txn.status == SendStatus.DISMISSED) {
+                            TransactionCard(
+                                transaction = txn,
+                                onClick = { selectedTransaction = txn },
+                                onRestore = {
+                                    smsHistoryViewModel.restoreTransaction(txn)
+                                    smsViewModel.restoreTransaction(txn)
+                                    scope.launch {
+                                        snackbarHostState.currentSnackbarData?.dismiss()
+                                        snackbarHostState.showSnackbar(
+                                            message = "Restored to Pending",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                }
+                            )
+                        } else {
+                            val dismissBoxState = rememberSwipeToDismissBoxState(
+                                confirmValueChange = { dismissValue ->
+                                    if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
+                                        transactionToDismiss = txn
+                                        false
+                                    } else false
+                                }
+                            )
+
+                            SwipeToDismissBox(
+                                state = dismissBoxState,
+                                enableDismissFromStartToEnd = true,
+                                enableDismissFromEndToStart = true,
+                                backgroundContent = {
+                                    val direction = dismissBoxState.dismissDirection
+                                    val alignment = when (direction) {
+                                        SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                                        SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                                        else -> Alignment.CenterEnd
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(ErrorCrimson.copy(alpha = 0.16f))
+                                            .padding(horizontal = 20.dp),
+                                        contentAlignment = alignment
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Filled.DeleteSweep,
+                                                contentDescription = "Dismiss",
+                                                tint = ErrorCrimson,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(
+                                                text = "Dismiss",
+                                                color = ErrorCrimson,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            ) {
+                                TransactionCard(
+                                    transaction = txn,
+                                    onClick = { selectedTransaction = txn }
+                                )
+                            }
+                        }
                     }
                 }
-                item { Spacer(Modifier.height(80.dp)) } // FAB clearance
+                item(key = "footer_spacer") { Spacer(Modifier.height(80.dp)) } // FAB clearance
             }
         }
+    }
+
+        // ─── Snackbar Host for Undo ───
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 76.dp)
+        )
     }
 
     // ─── Transaction Editor Sheet ───
@@ -302,7 +401,61 @@ fun HomeScreen(
                 transactionViewModel.sendTransaction(txn, smsHistoryViewModel) { _ -> }
                 selectedTransaction = null
             },
-            onDismiss = { selectedTransaction = null }
+            onDismiss = { selectedTransaction = null },
+            onDismissTransaction = { reason ->
+                smsHistoryViewModel.dismissTransaction(txn, reason)
+                smsViewModel.dismissTransaction(txn, reason)
+                selectedTransaction = null
+                scope.launch {
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                    val result = snackbarHostState.showSnackbar(
+                        message = "Dismissed as ${reason.badgeLabel}",
+                        actionLabel = "UNDO",
+                        duration = SnackbarDuration.Short
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        smsHistoryViewModel.restoreTransaction(txn)
+                        smsViewModel.restoreTransaction(txn)
+                    }
+                }
+            },
+            onRestoreTransaction = {
+                smsHistoryViewModel.restoreTransaction(txn)
+                smsViewModel.restoreTransaction(txn)
+                selectedTransaction = null
+                scope.launch {
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                    snackbarHostState.showSnackbar(
+                        message = "Restored to Pending",
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
+        )
+    }
+
+    // ─── Dismiss Reason Sheet (triggered by swipe) ───
+    transactionToDismiss?.let { txn ->
+        DismissReasonSheet(
+            transaction = txn,
+            onConfirm = { reason ->
+                smsHistoryViewModel.dismissTransaction(txn, reason)
+                smsViewModel.dismissTransaction(txn, reason)
+                transactionToDismiss = null
+                scope.launch {
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                    val result = snackbarHostState.showSnackbar(
+                        message = "Dismissed as ${reason.badgeLabel}",
+                        actionLabel = "UNDO",
+                        duration = SnackbarDuration.Short
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        smsHistoryViewModel.restoreTransaction(txn)
+                        smsViewModel.restoreTransaction(txn)
+                    }
+                }
+            },
+            onDismiss = { transactionToDismiss = null }
         )
     }
 }

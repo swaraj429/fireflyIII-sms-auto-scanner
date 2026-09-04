@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.swaraj429.firefly3smsscanner.db.FireflyDatabase
 import com.swaraj429.firefly3smsscanner.db.SmsRecordEntity
 import com.swaraj429.firefly3smsscanner.debug.DebugLog
+import com.swaraj429.firefly3smsscanner.model.DismissReason
 import com.swaraj429.firefly3smsscanner.model.ParsedTransaction
 import com.swaraj429.firefly3smsscanner.model.SendStatus
 import com.swaraj429.firefly3smsscanner.model.TransactionType
@@ -40,6 +41,7 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
     var pendingCount by mutableStateOf(0)
     var sentCount by mutableStateOf(0)
     var failedCount by mutableStateOf(0)
+    var dismissedCount by mutableStateOf(0)
     var totalCount by mutableStateOf(0)
 
     init {
@@ -73,10 +75,11 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
                 pendingCount = records.count { it.syncStatus == "PENDING" }
                 sentCount = records.count { it.syncStatus == "SENT" }
                 failedCount = records.count { it.syncStatus == "FAILED" }
+                dismissedCount = records.count { it.syncStatus == "DISMISSED" }
                 totalCount = records.size
 
                 statusMessage = "$totalCount records · $pendingCount pending · $sentCount sent"
-                DebugLog.log(TAG, "Loaded $totalCount history records (pending=$pendingCount, sent=$sentCount, failed=$failedCount)")
+                DebugLog.log(TAG, "Loaded $totalCount history records (pending=$pendingCount, sent=$sentCount, failed=$failedCount, dismissed=$dismissedCount)")
             } catch (e: Exception) {
                 statusMessage = "❌ ${e.message}"
                 DebugLog.log(TAG, "Error loading history: ${e.message}")
@@ -144,6 +147,52 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /**
+     * Mark a transaction as DISMISSED in the DB with a reason.
+     */
+    fun dismissTransaction(
+        transaction: ParsedTransaction,
+        reason: DismissReason = DismissReason.DUPLICATE
+    ) {
+        viewModelScope.launch {
+            try {
+                val hash = SmsHasher.hash(transaction.sender, transaction.rawMessage)
+                val now = System.currentTimeMillis()
+                dao.markDismissed(hash, reason.name, now)
+                transaction.status = SendStatus.DISMISSED
+                transaction.dismissReason = reason
+                transaction.dismissedAt = now
+
+                refreshTransaction(transaction)
+                updateCounts()
+                DebugLog.log(TAG, "Dismissed record: $hash (reason=${reason.name})")
+            } catch (e: Exception) {
+                DebugLog.log(TAG, "Error dismissing record: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Restore a DISMISSED transaction back to PENDING (for undo or manual restoration).
+     */
+    fun restoreTransaction(transaction: ParsedTransaction) {
+        viewModelScope.launch {
+            try {
+                val hash = SmsHasher.hash(transaction.sender, transaction.rawMessage)
+                val now = System.currentTimeMillis()
+                dao.restoreDismissed(hash, now)
+                transaction.status = SendStatus.PENDING
+                transaction.dismissReason = null
+                transaction.dismissedAt = null
+
+                refreshTransaction(transaction)
+                updateCounts()
+                DebugLog.log(TAG, "Restored dismissed record: $hash")
+            } catch (e: Exception) {
+                DebugLog.log(TAG, "Error restoring record: ${e.message}")
+            }
+        }
+    }
 
     // ── Internals ────────────────────────────────────────────────────────────
 
@@ -164,13 +213,24 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    private fun refreshTransaction(transaction: ParsedTransaction) {
+        val hash = SmsHasher.hash(transaction.sender, transaction.rawMessage)
+        val idx = historyTransactions.indexOfFirst {
+            SmsHasher.hash(it.sender, it.rawMessage) == hash
+        }
+        if (idx >= 0) {
+            historyTransactions[idx] = transaction.copy()
+        }
+    }
+
     private fun updateCounts() {
         viewModelScope.launch {
             val cutoff = cutoffMillis(30)
             pendingCount = dao.countByStatus("PENDING", cutoff)
             sentCount = dao.countByStatus("SENT", cutoff)
             failedCount = dao.countByStatus("FAILED", cutoff)
-            totalCount = pendingCount + sentCount + failedCount
+            dismissedCount = dao.countByStatus("DISMISSED", cutoff)
+            totalCount = pendingCount + sentCount + failedCount + dismissedCount
             statusMessage = "$totalCount records · $pendingCount pending · $sentCount sent"
         }
     }
@@ -193,6 +253,10 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
         } else {
             mutableListOf()
         }
+        val parsedReason = if (!dismissReason.isNullOrBlank()) {
+            DismissReason.fromString(dismissReason)
+        } else null
+
         return ParsedTransaction(
             amount = amount,
             type = txType,
@@ -208,7 +272,9 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
             categoryName = categoryName,
             budgetId = budgetId,
             budgetName = budgetName,
-            selectedTags = tagList
+            selectedTags = tagList,
+            dismissReason = parsedReason,
+            dismissedAt = dismissedAt
         )
     }
 
@@ -230,7 +296,9 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
             categoryName = categoryName,
             budgetId = budgetId,
             budgetName = budgetName,
-            selectedTagsCommaSeparated = selectedTags.joinToString(",")
+            selectedTagsCommaSeparated = selectedTags.joinToString(","),
+            dismissReason = dismissReason?.name,
+            dismissedAt = dismissedAt
         )
     }
 }

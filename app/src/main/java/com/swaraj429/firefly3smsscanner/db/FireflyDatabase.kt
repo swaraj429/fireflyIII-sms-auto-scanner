@@ -13,7 +13,7 @@ import androidx.room.RoomDatabase
         CachedBudget::class,
         SmsRecordEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class FireflyDatabase : RoomDatabase() {

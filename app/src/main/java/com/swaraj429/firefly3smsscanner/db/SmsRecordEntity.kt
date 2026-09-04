@@ -55,12 +55,17 @@ data class SmsRecordEntity(
     val budgetName: String? = null,
     val selectedTagsCommaSeparated: String = "", // Room doesn't natively do lists without TypeConverters
 
-    // --- Sync Status ---
-    /** PENDING | SENT | FAILED */
+    /** PENDING | SENT | FAILED | DISMISSED */
     val syncStatus: String = "PENDING",
 
     /** Firefly III transaction ID returned after a successful POST */
     val fireflyTransactionId: String? = null,
+
+    /** Reason for dismissal if syncStatus is DISMISSED (e.g. DUPLICATE, CREDIT_CARD_ECHO) */
+    val dismissReason: String? = null,
+
+    /** When this record was dismissed (millis) */
+    val dismissedAt: Long? = null,
 
     /** When this record was first created (millis) */
     val createdAt: Long = System.currentTimeMillis(),

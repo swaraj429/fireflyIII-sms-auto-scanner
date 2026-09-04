@@ -25,7 +25,9 @@ data class ParsedTransaction(
     var destinationAccountId: String? = null,
     var destinationAccountName: String? = null,
     // Tracking
-    var status: SendStatus = SendStatus.PENDING
+    var status: SendStatus = SendStatus.PENDING,
+    var dismissReason: DismissReason? = null,
+    var dismissedAt: Long? = null
 ) {
     val effectiveAmount: Double get() = correctedAmount ?: amount
     val effectiveType: TransactionType get() = correctedType ?: type
@@ -62,5 +64,41 @@ enum class TransactionType {
 }
 
 enum class SendStatus {
-    PENDING, SENDING, SENT, FAILED
+    PENDING, SENDING, SENT, FAILED, DISMISSED
+}
+
+/**
+ * Reasons why an SMS transaction might be dismissed by the user.
+ */
+enum class DismissReason(
+    val title: String,
+    val description: String,
+    val badgeLabel: String
+) {
+    DUPLICATE(
+        title = "Duplicate Transaction",
+        description = "Same transaction reported by another SMS (e.g. Bank & UPI alerts)",
+        badgeLabel = "Duplicate"
+    ),
+    CREDIT_CARD_ECHO(
+        title = "Credit Card Bill Echo",
+        description = "Bank debit alert that mirrors a credit card bill payment",
+        badgeLabel = "CC Echo"
+    ),
+    UNRELATED(
+        title = "Unrelated / Non-Expense",
+        description = "Promotional message, OTP, balance inquiry, or personal text",
+        badgeLabel = "Unrelated"
+    ),
+    OTHER(
+        title = "Other",
+        description = "Manually dismissed / ignored",
+        badgeLabel = "Dismissed"
+    );
+
+    companion object {
+        fun fromString(name: String?): DismissReason {
+            return entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: OTHER
+        }
+    }
 }

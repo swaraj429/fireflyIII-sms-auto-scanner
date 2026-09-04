@@ -38,6 +38,7 @@ import java.util.*
 fun TransactionCard(
     transaction: ParsedTransaction,
     onClick: () -> Unit,
+    onRestore: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -50,8 +51,10 @@ fun TransactionCard(
 
     val isExpense = transaction.isExpense
     val isTransfer = transaction.effectiveType == TransactionType.TRANSFER
+    val isDismissed = transaction.status == SendStatus.DISMISSED
     val amountColor by animateColorAsState(
         targetValue = when {
+            isDismissed -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             isTransfer -> Primary
             isExpense -> DebitRed
             else -> CreditGreen
@@ -71,9 +74,10 @@ fun TransactionCard(
             ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (isDismissed) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+            else MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDismissed) 0.dp else 1.dp)
     ) {
         Row(
             modifier = Modifier
@@ -88,6 +92,7 @@ fun TransactionCard(
                     .clip(RoundedCornerShape(12.dp))
                     .background(
                         when {
+                            isDismissed -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                             isTransfer -> Primary.copy(alpha = 0.15f)
                             isExpense -> DebitRedContainer
                             else -> CreditGreenContainer
@@ -97,6 +102,7 @@ fun TransactionCard(
             ) {
                 Icon(
                     imageVector = when {
+                        isDismissed -> Icons.Outlined.Block
                         isTransfer -> Icons.Outlined.SwapHoriz
                         isExpense -> Icons.Outlined.ArrowUpward
                         else -> Icons.Outlined.ArrowDownward
@@ -119,7 +125,7 @@ fun TransactionCard(
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = if (isDismissed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -177,7 +183,7 @@ fun TransactionCard(
 
             Spacer(Modifier.width(8.dp))
 
-            // Amount + status
+            // Amount + status / restore
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = "${when { isTransfer -> "↔"; isExpense -> "-"; else -> "+" }}${formatCurrency(transaction.effectiveAmount)}",
@@ -186,7 +192,30 @@ fun TransactionCard(
                     color = amountColor
                 )
                 Spacer(Modifier.height(2.dp))
-                StatusBadge(status = transaction.status, compact = true)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    StatusBadge(
+                        status = transaction.status,
+                        compact = true,
+                        customLabel = if (isDismissed) {
+                            transaction.dismissReason?.badgeLabel ?: "Dismissed"
+                        } else null
+                    )
+                    if (isDismissed && onRestore != null) {
+                        Spacer(Modifier.width(6.dp))
+                        FilledTonalIconButton(
+                            onClick = onRestore,
+                            modifier = Modifier.size(24.dp),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Restore,
+                                contentDescription = "Restore",
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -199,9 +228,10 @@ fun TransactionCard(
 fun StatusBadge(
     status: SendStatus,
     compact: Boolean = false,
+    customLabel: String? = null,
     modifier: Modifier = Modifier
 ) {
-    val (bgColor, textColor, text, icon) = when (status) {
+    val (bgColor, textColor, defaultText, icon) = when (status) {
         SendStatus.PENDING -> StatusInfo(
             WarningAmber.copy(alpha = 0.15f),
             WarningAmber,
@@ -226,7 +256,15 @@ fun StatusBadge(
             "Failed",
             Icons.Filled.Error
         )
+        SendStatus.DISMISSED -> StatusInfo(
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f),
+            MaterialTheme.colorScheme.onSurfaceVariant,
+            "Dismissed",
+            Icons.Filled.Block
+        )
     }
+
+    val text = customLabel ?: defaultText
 
     Surface(
         modifier = modifier,

@@ -83,6 +83,32 @@ interface SmsRecordDao {
     """)
     suspend fun markPending(hash: String, now: Long = System.currentTimeMillis())
 
+    /**
+     * Mark a record as DISMISSED with a specific reason.
+     */
+    @Query("""
+        UPDATE sms_records 
+        SET syncStatus = 'DISMISSED', 
+            dismissReason = :reason,
+            dismissedAt = :now,
+            updatedAt = :now
+        WHERE smsHash = :hash
+    """)
+    suspend fun markDismissed(hash: String, reason: String, now: Long = System.currentTimeMillis())
+
+    /**
+     * Restore a DISMISSED record back to PENDING (e.g. Undo action).
+     */
+    @Query("""
+        UPDATE sms_records 
+        SET syncStatus = 'PENDING', 
+            dismissReason = NULL,
+            dismissedAt = NULL,
+            updatedAt = :now
+        WHERE smsHash = :hash
+    """)
+    suspend fun restoreDismissed(hash: String, now: Long = System.currentTimeMillis())
+
     // ── Cleanup ──────────────────────────────────────────────────────────────
 
     /**
