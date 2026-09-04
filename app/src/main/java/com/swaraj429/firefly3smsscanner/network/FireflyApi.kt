@@ -34,4 +34,32 @@ interface FireflyApi {
     suspend fun createTransaction(
         @Body request: FireflyTransactionRequest
     ): Response<FireflyTransactionResponse>
+
+    @PUT("api/v1/transactions/{id}")
+    suspend fun updateTransaction(
+        @Path("id") id: String,
+        @Body request: FireflyTransactionRequest
+    ): Response<FireflyTransactionResponse>
+
+    /**
+     * List transactions with date filtering and pagination.
+     * Used by the reconciliation engine to fetch remote transactions.
+     */
+    @GET("api/v1/transactions")
+    suspend fun listTransactions(
+        @Query("start") start: String,   // "YYYY-MM-DD"
+        @Query("end") end: String,       // "YYYY-MM-DD"
+        @Query("type") type: String = "all",  // "all", "withdrawal", "deposit", "transfer"
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 50
+    ): Response<FireflyTransactionListResponse>
+
+    /**
+     * Get a single transaction by ID.
+     * Used to fetch updated details for a known transaction.
+     */
+    @GET("api/v1/transactions/{id}")
+    suspend fun getTransaction(
+        @Path("id") id: String
+    ): Response<FireflyTransactionDetailResponse>
 }

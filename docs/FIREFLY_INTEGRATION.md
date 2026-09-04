@@ -263,6 +263,127 @@ This is the most important endpoint. It creates a new transaction in Firefly III
 
 ---
 
+### `PUT /api/v1/transactions/{id}`
+
+**Used for:** `TransactionViewModel.updateTransaction()`
+
+Allows updating an already submitted transaction in Firefly III directly from the `TransactionEditorSheet`.
+
+**Path parameters:**
+- `id` — The Firefly transaction group ID (`fireflyTransactionId`)
+
+**Request body shape:**
+Matches `FireflyTransactionRequest`, but critically requires `transaction_journal_id` inside the split so Firefly knows which split journal to update:
+
+```json
+{
+  "error_if_duplicate_hash": false,
+  "apply_rules": true,
+  "transactions": [
+    {
+      "transaction_journal_id": "104",
+      "type": "withdrawal",
+      "description": "Starbucks Coffee",
+      "amount": "250.00",
+      "date": "2025-01-15T10:30:00+05:30",
+      "source_id": "1",
+      "destination_name": "Starbucks",
+      "category_name": "Coffee & Drinks",
+      "tags": ["coffee", "work"],
+      "budget_id": "2"
+    }
+  ]
+}
+```
+
+**Fallback behavior:** If the transaction was deleted or not found on the server (HTTP 404), the client gracefully falls back to recreating the transaction via `POST /api/v1/transactions` and updating the local record with the new ID.
+
+---
+
+### `GET /api/v1/transactions`
+
+**Used for:** `FireflySyncEngine.reconcile()`
+
+Fetches remote transactions within a date range to synchronize state back into the local Room database.
+
+**Query parameters:**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `start` | `String` | required | Start date in `YYYY-MM-DD` |
+| `end` | `String` | required | End date in `YYYY-MM-DD` |
+| `type` | `String` | `"all"` | Filter by type (`all`, `withdrawal`, `deposit`, `transfer`) |
+| `page` | `Int` | `1` | Page number |
+| `limit` | `Int` | `50` | Records per page |
+
+**Response shape (abbreviated):**
+```json
+{
+  "data": [
+    {
+      "id": "42",
+      "type": "transactions",
+      "attributes": {
+        "group_title": null,
+        "transactions": [
+          {
+            "transaction_journal_id": "104",
+            "type": "withdrawal",
+            "date": "2025-01-15T10:30:00+05:30",
+            "amount": "250.00",
+            "description": "Starbucks Coffee",
+            "notes": "Auto-parsed from SMS:\n[body]\nsmsHash=a1b2c3d4e5f6...",
+            "category_id": "3",
+            "category_name": "Food & Dining",
+            "budget_id": "2",
+            "budget_name": "Discretionary",
+            "tags": ["coffee"],
+            "source_id": "1",
+            "source_name": "HDFC Savings",
+            "destination_id": "12",
+            "destination_name": "Starbucks"
+          }
+        ]
+      }
+    }
+  ],
+  "meta": {
+    "pagination": {
+      "total": 120,
+      "count": 50,
+      "per_page": 50,
+      "current_page": 1,
+      "total_pages": 3
+    }
+  }
+}
+```
+
+---
+
+### `GET /api/v1/transactions/{id}`
+
+**Used for:** Inspecting single transaction group details and journals by ID.
+
+---
+
+## Bi-Directional Synchronization & Reconciliation
+
+The `FireflySyncEngine` provides automated, multi-pass reconciliation:
+
+1. **Hash Embedding on Outbound Calls:** When an SMS is sent to Firefly via `POST` or `PUT`, the SHA-256 `smsHash` is appended to the `notes` field (`smsHash=<hash>`).
+2. **Periodic & On-Demand Sync:**
+   - On app launch, if more than 12 hours have passed since the last sync, a reconciliation is triggered.
+   - Users can tap the compact sync button on the Home screen to trigger immediate reconciliation.
+3. **Multi-Pass Reconciliation:**
+   - **Primary Pass (Hash Match):** Extracts `smsHash` from remote transaction notes and matches it against local Room DB records.
+   - **Secondary Pass (Fuzzy Heuristics):** For legacy records without a hash in notes, matches by amount, transaction type, and a 24-hour date window.
+4. **Local DB Updates:**
+   - Any remote changes (e.g. edits to description, category, tags, accounts, or budget made directly in Firefly's web interface) are propagated into `sms_records`.
+   - Records previously marked `PENDING` or `FAILED` are automatically marked as `SENT` if they exist in Firefly (crucial for app re-installs).
+
+---
+
 ## Firefly III API Versioning
 
 The app targets **Firefly III API v2** (route prefix `/api/v1/`). The API has been stable at this path since Firefly III v5. If your instance is older than v5.0, some endpoints may not exist.
@@ -271,11 +392,10 @@ To check your API version, the `GET /api/v1/about` response includes `api_versio
 
 ---
 
-## Pagination (Current Limitation)
+## Pagination
 
-All list endpoints (`categories`, `tags`, `budgets`, `accounts`) are fetched with `limit=100`. Firefly III paginates by default, but the app does **not** implement pagination cursor following. Users with more than 100 of any resource will see incomplete lists.
-
-This is a tracked issue — contributions to add pagination are welcome.
+- **Metadata endpoints** (`categories`, `tags`, `budgets`, `accounts`) are fetched with `limit=100`.
+- **Transaction list endpoint** (`GET /api/v1/transactions`) in `FireflySyncEngine` implements full multi-page iteration using `meta.pagination.totalPages` and `page++` traversal with rate-limiting backoffs.
 
 ---
 

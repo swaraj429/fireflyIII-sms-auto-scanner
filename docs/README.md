@@ -27,9 +27,10 @@ Language:       Kotlin 1.9.22
 UI:             Jetpack Compose + Material3 (BOM 2024.02.00)
 Architecture:   MVVM (ViewModel + StateFlow/mutableState)
 Networking:     Retrofit 2.9 + OkHttp 4.12
-Navigation:     Navigation Compose 2.7.6
+Navigation:     Navigation Compose 2.7.6 (3-tab: Home, Rules, Settings)
 Background:     BroadcastReceiver + goAsync() + Coroutines
-Persistence:    SharedPreferences
+Persistence:    Room Database (SQLite) + SharedPreferences (Preferences)
+Sync Engine:    FireflySyncEngine (Bi-directional reconciliation)
 Min SDK:        API 26 (Android 8.0)
 Target SDK:     API 34 (Android 14)
 ```
@@ -43,4 +44,6 @@ Target SDK:     API 34 (Android 14)
 | Navigation graph | `MainApp()` in `MainActivity.kt` |
 | SMS receive | `SmsReceiver.kt` |
 | Transaction parsing | `SmsParser.kt` |
+| Local database | `FireflyDatabase.kt` + `SmsRecordDao.kt` |
+| Bi-directional sync | `FireflySyncEngine.kt` |
 | Firefly API calls | `FireflyApi.kt` + `RetrofitClient.kt` |

@@ -15,24 +15,26 @@ import com.swaraj429.firefly3smsscanner.model.ParsedTransaction
 import com.swaraj429.firefly3smsscanner.model.SendStatus
 import com.swaraj429.firefly3smsscanner.model.TransactionType
 import com.swaraj429.firefly3smsscanner.parser.DescriptionExtractor
+import com.swaraj429.firefly3smsscanner.prefs.AppPrefs
 import com.swaraj429.firefly3smsscanner.util.SmsHasher
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
 /**
- * Manages the 30-day SMS record history stored in Room.
+ * Manages the SMS record history stored in Room (default 30 days, configurable).
  *
  * Responsibilities:
  *  1. Save parsed transactions as [SmsRecordEntity] with hash-based dedup.
- *  2. Load records from the last 30 days and expose them as [ParsedTransaction].
+ *  2. Load records from the retention window and expose them as [ParsedTransaction].
  *  3. Track sync status (PENDING / SENT / FAILED) per record.
- *  4. Purge records older than 30 days on every load.
+ *  4. Purge records older than retention window on every load.
  */
 class SmsHistoryViewModel(application: Application) : AndroidViewModel(application) {
     private val TAG = "SmsHistoryVM"
     private val dao = FireflyDatabase.getDatabase(application).smsRecordDao()
+    private val prefs = AppPrefs(application)
 
-    /** All records from the last 30 days, converted to ParsedTransactions. */
+    /** All records from the configured retention window, converted to ParsedTransactions. */
     val historyTransactions = mutableStateListOf<ParsedTransaction>()
 
     var isLoading by mutableStateOf(false)
@@ -52,21 +54,22 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
     // ── Public API ───────────────────────────────────────────────────────────
 
     /**
-     * Load all records from the last 30 days, purging older data first.
+     * Load all records from the configured retention window, purging older data first.
      */
     fun loadHistory() {
         viewModelScope.launch {
             isLoading = true
             try {
                 // 1. Purge expired records
-                val cutoff30d = cutoffMillis(30)
-                val deleted = dao.deleteOlderThan(cutoff30d)
+                val rangeDays = prefs.syncRangeDays
+                val cutoff = cutoffMillis(rangeDays)
+                val deleted = dao.deleteOlderThan(cutoff)
                 if (deleted > 0) {
-                    DebugLog.log(TAG, "Purged $deleted records older than 30 days")
+                    DebugLog.log(TAG, "Purged $deleted records older than $rangeDays days")
                 }
 
                 // 2. Fetch surviving records
-                val records = dao.getRecordsSince(cutoff30d)
+                val records = dao.getRecordsSince(cutoff)
 
                 // 3. Convert to ParsedTransactions for UI
                 historyTransactions.clear()
@@ -116,11 +119,30 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             try {
                 val hash = SmsHasher.hash(transaction.sender, transaction.rawMessage)
-                dao.markSent(hash, fireflyId)
+                val now = System.currentTimeMillis()
+                dao.markSentWithMetadata(
+                    hash = hash,
+                    fireflyId = fireflyId,
+                    amount = transaction.effectiveAmount,
+                    transactionType = transaction.effectiveType.name,
+                    description = transaction.description,
+                    categoryName = transaction.categoryName,
+                    tags = transaction.selectedTags.joinToString(","),
+                    sourceAccountId = transaction.sourceAccountId,
+                    sourceAccountName = transaction.sourceAccountName,
+                    destinationAccountId = transaction.destinationAccountId,
+                    destinationAccountName = transaction.destinationAccountName,
+                    budgetId = transaction.budgetId,
+                    budgetName = transaction.budgetName,
+                    now = now
+                )
                 transaction.status = SendStatus.SENT
+                transaction.fireflyTransactionId = fireflyId
+                transaction.lastSyncedAt = now
+                transaction.hasRemoteEdits = true
 
-                // Update the local list item
-                refreshTransactionStatus(hash, "SENT")
+                // Update the local list item with full updated metadata
+                refreshTransaction(transaction)
                 updateCounts()
                 DebugLog.log(TAG, "Marked record as SENT: $hash → Firefly #$fireflyId")
             } catch (e: Exception) {
@@ -226,7 +248,7 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun updateCounts() {
         viewModelScope.launch {
-            val cutoff = cutoffMillis(30)
+            val cutoff = cutoffMillis(prefs.syncRangeDays)
             pendingCount = dao.countByStatus("PENDING", cutoff)
             sentCount = dao.countByStatus("SENT", cutoff)
             failedCount = dao.countByStatus("FAILED", cutoff)
@@ -264,6 +286,8 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
             description
         }
 
+        val hasRemote = lastSyncedAt != null
+
         return ParsedTransaction(
             amount = amount,
             type = txType,
@@ -281,7 +305,11 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
             budgetName = budgetName,
             selectedTags = tagList,
             dismissReason = parsedReason,
-            dismissedAt = dismissedAt
+            dismissedAt = dismissedAt,
+            fireflyTransactionId = fireflyTransactionId,
+            fireflyTransactionJournalId = fireflyTransactionJournalId,
+            lastSyncedAt = lastSyncedAt,
+            hasRemoteEdits = hasRemote
         )
     }
 
@@ -304,6 +332,9 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
             budgetId = budgetId,
             budgetName = budgetName,
             selectedTagsCommaSeparated = selectedTags.joinToString(","),
+            fireflyTransactionId = fireflyTransactionId,
+            fireflyTransactionJournalId = fireflyTransactionJournalId,
+            lastSyncedAt = lastSyncedAt,
             dismissReason = dismissReason?.name,
             dismissedAt = dismissedAt
         )

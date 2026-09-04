@@ -22,7 +22,8 @@ data class FireflyTransactionSplit(
     val notes: String? = null,
     @SerializedName("category_name") val categoryName: String? = null,
     val tags: List<String>? = null,
-    @SerializedName("budget_id") val budgetId: String? = null
+    @SerializedName("budget_id") val budgetId: String? = null,
+    @SerializedName("transaction_journal_id") val transactionJournalId: String? = null
 )
 
 // ---- Response models ----
@@ -129,4 +130,58 @@ data class FireflyAccount(
     val type: String,
     val accountNumber: String? = null,
     val accountRole: String? = null
+)
+
+// ---- Transaction List Response ----
+
+data class FireflyTransactionListResponse(
+    val data: List<FireflyTransactionGroupWrapper> = emptyList(),
+    val meta: FireflyPaginationMeta? = null
+)
+
+data class FireflyPaginationMeta(
+    val pagination: FireflyPagination? = null
+)
+
+data class FireflyPagination(
+    @SerializedName("total") val total: Int = 0,
+    @SerializedName("count") val count: Int = 0,
+    @SerializedName("per_page") val perPage: Int = 50,
+    @SerializedName("current_page") val currentPage: Int = 1,
+    @SerializedName("total_pages") val totalPages: Int = 1
+)
+
+data class FireflyTransactionGroupWrapper(
+    val id: String,            // Transaction group ID
+    val type: String,          // "transactions"
+    val attributes: FireflyTransactionGroupAttributes
+)
+
+data class FireflyTransactionGroupAttributes(
+    @SerializedName("group_title") val groupTitle: String? = null,
+    val transactions: List<FireflyTransactionJournal> = emptyList()
+)
+
+data class FireflyTransactionJournal(
+    @SerializedName("transaction_journal_id") val transactionJournalId: String = "",
+    val type: String = "withdrawal",              // "withdrawal", "deposit", "transfer"
+    val description: String = "",
+    val amount: String = "0.00",
+    val date: String = "",                        // ISO 8601
+    val notes: String? = null,
+    @SerializedName("category_id") val categoryId: String? = null,
+    @SerializedName("category_name") val categoryName: String? = null,
+    @SerializedName("budget_id") val budgetId: String? = null,
+    @SerializedName("budget_name") val budgetName: String? = null,
+    val tags: List<String>? = null,               // Firefly returns tags as string array
+    @SerializedName("source_id") val sourceId: String? = null,
+    @SerializedName("source_name") val sourceName: String? = null,
+    @SerializedName("destination_id") val destinationId: String? = null,
+    @SerializedName("destination_name") val destinationName: String? = null
+)
+
+// ---- Transaction Detail Response (single transaction) ----
+
+data class FireflyTransactionDetailResponse(
+    val data: FireflyTransactionGroupWrapper? = null
 )

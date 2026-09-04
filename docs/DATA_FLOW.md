@@ -43,6 +43,73 @@ This flow explains how `DebugLog` receives log calls from background threads (Ok
 
 ---
 
+---
+
+## Flow 6: Bi-Directional Reconciliation (`FireflySyncEngine`)
+
+```
+App Launch (>12h) / Tap Sync Button
+          │
+          ▼
+HomeScreen / MainActivity
+          │ calls reconcile()
+          ▼
+FireflySyncEngine
+          │
+          ├── 1. dao.getRecordsSince(cutoffMillis) ────────► Retrieve local Room records
+          │
+          ├── 2. api.listTransactions(start, end, page) ──► Query Firefly III across pages
+          │
+          ├── 3. Primary Pass: Match notes (smsHash=...)
+          │      └── Local record found?
+          │           ├── Update metadata (category, tags, description, accounts, budget)
+          │           ├── Transition status (PENDING/FAILED -> SENT)
+          │           └── Record remote transaction group ID & journal ID
+          │
+          ├── 4. Secondary Pass: Fuzzy match (amount + type + 24h window)
+          │      └── Heuristic match found?
+          │           └── Update metadata and set status to SENT
+          │
+          ▼
+Room DB (sms_records updated)
+          │
+          ▼
+SmsHistoryViewModel (UI auto-refreshes via Room Flow)
+```
+
+---
+
+## Flow 7: In-App Transaction Update (`PUT /api/v1/transactions/{id}`)
+
+```
+User taps SENT transaction card
+          │
+          ▼
+TransactionEditorSheet opens
+          │ User edits category, tags, description, accounts, or budget
+          ▼
+User taps "Update in Firefly"
+          │
+          ▼
+TransactionViewModel.updateTransaction()
+          │
+          ├── Creates FireflyTransactionRequest with transaction_journal_id
+          │
+          ├── Calls api.updateTransaction(fireflyTransactionId, request)
+          │        │
+          │        ├── HTTP 200 OK ──────► Update Room DB with new metadata
+          │        │
+          │        └── HTTP 404 (Deleted) ─► Fallback to createTransaction() (POST)
+          │                                   └── Save newly generated ID to Room DB
+          ▼
+SmsRecordDao.markSentWithMetadata(...)
+          │
+          ▼
+UI updates with latest synced state
+```
+
+---
+
 ## State Ownership Map
 
 | State | Owner | How UI reads it |
@@ -51,9 +118,11 @@ This flow explains how `DebugLog` receives log calls from background threads (Ok
 | `connectionStatus`, `isTesting` | `SetupViewModel` | `mutableStateOf` |
 | `smsMessages` | `SmsViewModel` | `mutableStateListOf` |
 | `parsedTransactions` | `SmsViewModel` | `mutableStateListOf` |
-| `fromDate`, `toDate` | `SmsViewModel` | `mutableStateOf` |
-| `lastResult` | `TransactionViewModel` | `mutableStateOf` |
+| `fromDate`, `toDate`, `selectedFilter` | `SmsViewModel` | `mutableStateOf` |
+| `lastResult`, `isUpdating` | `TransactionViewModel` | `mutableStateOf` |
 | `categories`, `tags`, `budgets`, `*Accounts` | `FireflyDataViewModel` | `mutableStateListOf` |
 | `hasSynced`, `isLoading`, `lastSyncStatus` | `FireflyDataViewModel` | `mutableStateOf` |
+| `historyRecords`, `syncSummary`, `isSyncing` | `SmsHistoryViewModel` | `StateFlow` / `collectAsStateWithLifecycle()` |
+| `rules` | `RulesViewModel` | `StateFlow` / `collectAsState()` |
 | `entries`, `lastRequest`, `lastResponse` | `DebugLog` (singleton) | `mutableStateListOf` / `mutableStateOf` |
 | `pendingNotificationTransaction` | `MainActivity` | `mutableStateOf` (passed to `MainApp`) |

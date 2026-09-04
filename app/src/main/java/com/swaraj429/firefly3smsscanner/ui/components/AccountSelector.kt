@@ -23,6 +23,7 @@ import com.swaraj429.firefly3smsscanner.ui.theme.*
 fun AccountSelector(
     accounts: List<FireflyAccount>,
     selectedAccount: FireflyAccount?,
+    fallbackName: String? = null,
     autoMatchedAccount: FireflyAccount? = null,
     autoMatchConfidence: ConfidenceScore? = null,
     label: String = "Account",
@@ -31,6 +32,9 @@ fun AccountSelector(
 ) {
     var showSheet by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+
+    val displayText = selectedAccount?.name ?: fallbackName?.ifBlank { null } ?: "Select account"
+    val hasSelection = selectedAccount != null || !fallbackName.isNullOrBlank()
 
     Card(
         modifier = modifier.fillMaxWidth().clickable { showSheet = true },
@@ -46,10 +50,10 @@ fun AccountSelector(
             Column(Modifier.weight(1f)) {
                 Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    selectedAccount?.name ?: "Select account",
+                    displayText,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (selectedAccount != null) FontWeight.Medium else FontWeight.Normal,
-                    color = if (selectedAccount != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                    fontWeight = if (hasSelection) FontWeight.Medium else FontWeight.Normal,
+                    color = if (hasSelection) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             if (selectedAccount == autoMatchedAccount && autoMatchConfidence != null) {

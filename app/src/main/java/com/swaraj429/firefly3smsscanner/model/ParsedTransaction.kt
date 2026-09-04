@@ -27,7 +27,11 @@ data class ParsedTransaction(
     // Tracking
     var status: SendStatus = SendStatus.PENDING,
     var dismissReason: DismissReason? = null,
-    var dismissedAt: Long? = null
+    var dismissedAt: Long? = null,
+    var fireflyTransactionId: String? = null,
+    var fireflyTransactionJournalId: String? = null,
+    var lastSyncedAt: Long? = null,
+    var hasRemoteEdits: Boolean = false
 ) {
     val effectiveAmount: Double get() = correctedAmount ?: amount
     val effectiveType: TransactionType get() = correctedType ?: type

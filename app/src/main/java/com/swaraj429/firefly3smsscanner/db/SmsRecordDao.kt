@@ -62,6 +62,45 @@ interface SmsRecordDao {
     suspend fun markSent(hash: String, fireflyId: String, now: Long = System.currentTimeMillis())
 
     /**
+     * Mark a record as SENT with all user-edited metadata.
+     */
+    @Query("""
+        UPDATE sms_records 
+        SET syncStatus = 'SENT', 
+            fireflyTransactionId = :fireflyId,
+            amount = :amount,
+            transactionType = :transactionType,
+            description = :description,
+            categoryName = :categoryName,
+            selectedTagsCommaSeparated = :tags,
+            sourceAccountId = :sourceAccountId,
+            sourceAccountName = :sourceAccountName,
+            destinationAccountId = :destinationAccountId,
+            destinationAccountName = :destinationAccountName,
+            budgetId = :budgetId,
+            budgetName = :budgetName,
+            lastSyncedAt = :now,
+            updatedAt = :now
+        WHERE smsHash = :hash
+    """)
+    suspend fun markSentWithMetadata(
+        hash: String,
+        fireflyId: String,
+        amount: Double,
+        transactionType: String,
+        description: String,
+        categoryName: String?,
+        tags: String,
+        sourceAccountId: String?,
+        sourceAccountName: String?,
+        destinationAccountId: String?,
+        destinationAccountName: String?,
+        budgetId: String?,
+        budgetName: String?,
+        now: Long = System.currentTimeMillis()
+    )
+
+    /**
      * Mark a record as FAILED.
      */
     @Query("""
@@ -108,6 +147,116 @@ interface SmsRecordDao {
         WHERE smsHash = :hash
     """)
     suspend fun restoreDismissed(hash: String, now: Long = System.currentTimeMillis())
+
+    // ── Reconciliation Queries ──────────────────────────────────
+
+    /**
+     * Get all SENT records that have a fireflyTransactionId.
+     * Used by the reconciliation engine to find records that need syncing.
+     */
+    @Query("""
+        SELECT * FROM sms_records 
+        WHERE syncStatus = 'SENT' 
+        AND fireflyTransactionId IS NOT NULL
+        AND smsTimestamp >= :cutoffMillis
+        ORDER BY smsTimestamp DESC
+    """)
+    suspend fun getSentRecordsWithFireflyId(cutoffMillis: Long): List<SmsRecordEntity>
+
+    /**
+     * Get all PENDING records (for reinstall reconciliation — need to check if they exist in Firefly).
+     */
+    @Query("""
+        SELECT * FROM sms_records 
+        WHERE syncStatus = 'PENDING'
+        AND smsTimestamp >= :cutoffMillis
+        ORDER BY smsTimestamp DESC
+    """)
+    suspend fun getPendingRecords(cutoffMillis: Long): List<SmsRecordEntity>
+
+    /**
+     * Find a record by its SMS hash.
+     */
+    @Query("SELECT * FROM sms_records WHERE smsHash = :hash LIMIT 1")
+    suspend fun findByHash(hash: String): SmsRecordEntity?
+
+    /**
+     * Update all transaction details from Firefly (reconciliation).
+     * Firefly is the source of truth — updates description, tags, category,
+     * destination account, source account, budget, transaction type, and IDs.
+     */
+    @Query("""
+        UPDATE sms_records 
+        SET syncStatus = 'SENT',
+            fireflyTransactionId = :fireflyGroupId,
+            fireflyTransactionJournalId = :fireflyJournalId,
+            remoteDescription = :remoteDescription,
+            remoteTags = :remoteTags,
+            remoteCategory = :remoteCategory,
+            description = COALESCE(:remoteDescription, description),
+            selectedTagsCommaSeparated = COALESCE(:remoteTags, selectedTagsCommaSeparated),
+            categoryName = COALESCE(:remoteCategory, categoryName),
+            sourceAccountId = COALESCE(:sourceAccountId, sourceAccountId),
+            sourceAccountName = COALESCE(:sourceAccountName, sourceAccountName),
+            destinationAccountId = COALESCE(:destinationAccountId, destinationAccountId),
+            destinationAccountName = COALESCE(:destinationAccountName, destinationAccountName),
+            budgetId = COALESCE(:budgetId, budgetId),
+            budgetName = COALESCE(:budgetName, budgetName),
+            transactionType = COALESCE(:transactionType, transactionType),
+            lastSyncedAt = :now,
+            updatedAt = :now
+        WHERE smsHash = :hash
+    """)
+    suspend fun updateFromFirefly(
+        hash: String,
+        fireflyGroupId: String,
+        fireflyJournalId: String,
+        remoteDescription: String?,
+        remoteTags: String?,
+        remoteCategory: String?,
+        sourceAccountId: String?,
+        sourceAccountName: String?,
+        destinationAccountId: String?,
+        destinationAccountName: String?,
+        budgetId: String?,
+        budgetName: String?,
+        transactionType: String?,
+        now: Long = System.currentTimeMillis()
+    )
+
+    /**
+     * Reconcile a PENDING record to SENT (discovered during reinstall reconciliation).
+     * Overwrites local fields with Firefly's canonical values.
+     */
+    suspend fun reconcilePendingToSent(
+        hash: String,
+        fireflyGroupId: String,
+        fireflyJournalId: String,
+        remoteDescription: String?,
+        remoteTags: String?,
+        remoteCategory: String?,
+        sourceAccountId: String?,
+        sourceAccountName: String?,
+        destinationAccountId: String?,
+        destinationAccountName: String?,
+        budgetId: String?,
+        budgetName: String?,
+        transactionType: String?,
+        now: Long = System.currentTimeMillis()
+    ) = updateFromFirefly(
+        hash, fireflyGroupId, fireflyJournalId,
+        remoteDescription, remoteTags, remoteCategory,
+        sourceAccountId, sourceAccountName,
+        destinationAccountId, destinationAccountName,
+        budgetId, budgetName, transactionType, now
+    )
+
+    /**
+     * Get the latest lastSyncedAt timestamp across all records.
+     * Used to determine when the last reconciliation ran.
+     */
+    @Query("SELECT MAX(lastSyncedAt) FROM sms_records")
+    suspend fun getLastSyncTimestamp(): Long?
 
     // ── Cleanup ──────────────────────────────────────────────────────────────
 

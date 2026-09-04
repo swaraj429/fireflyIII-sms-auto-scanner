@@ -9,6 +9,8 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.swaraj429.firefly3smsscanner.MainActivity
+import com.swaraj429.firefly3smsscanner.db.FireflyDatabase
+import com.swaraj429.firefly3smsscanner.db.SmsRecordEntity
 import com.swaraj429.firefly3smsscanner.debug.DebugLog
 import com.swaraj429.firefly3smsscanner.model.FireflyTransactionRequest
 import com.swaraj429.firefly3smsscanner.model.FireflyTransactionSplit
@@ -19,6 +21,7 @@ import com.swaraj429.firefly3smsscanner.model.TransactionType
 import com.swaraj429.firefly3smsscanner.network.RetrofitClient
 import com.swaraj429.firefly3smsscanner.parser.SmsParser
 import com.swaraj429.firefly3smsscanner.prefs.AppPrefs
+import com.swaraj429.firefly3smsscanner.util.SmsHasher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -117,6 +120,24 @@ class SmsReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
 
         CoroutineScope(Dispatchers.IO).launch {
+            val db = FireflyDatabase.getDatabase(context)
+            val smsDao = db.smsRecordDao()
+            val hash = SmsHasher.hash(sender, rawMessage)
+
+            // Ensure the record exists in Room (covers case where Send Now tapped before app scanned)
+            smsDao.insertRecord(
+                SmsRecordEntity(
+                    smsHash = hash,
+                    sender = sender,
+                    body = rawMessage,
+                    smsTimestamp = timestamp,
+                    amount = amount,
+                    transactionType = type.name,
+                    description = "SMS: ${rawMessage.take(100)}",
+                    syncStatus = "PENDING"
+                )
+            )
+
             try {
                 val api = RetrofitClient.create(prefs.baseUrl, prefs.accessToken)
                 val dateStr = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
@@ -132,7 +153,7 @@ class SmsReceiver : BroadcastReceiver() {
                         sourceId = prefs.accountId,
                         destinationName = "SMS Expense",
                         date = dateStr,
-                        notes = "Auto-sent from notification:\n$rawMessage"
+                        notes = "Auto-sent from notification:\nsmsHash=$hash\n$rawMessage"
                     )
                 } else {
                     FireflyTransactionSplit(
@@ -142,7 +163,7 @@ class SmsReceiver : BroadcastReceiver() {
                         sourceName = "SMS Income",
                         destinationId = prefs.accountId,
                         date = dateStr,
-                        notes = "Auto-sent from notification:\n$rawMessage"
+                        notes = "Auto-sent from notification:\nsmsHash=$hash\n$rawMessage"
                     )
                 }
 
@@ -152,16 +173,19 @@ class SmsReceiver : BroadcastReceiver() {
 
                 if (response.isSuccessful) {
                     val id = response.body()?.data?.id ?: "?"
+                    smsDao.markSent(hash, id)
                     val msg = "✅ ₹$amountStr ${type.name.lowercase()} added to Firefly (#$id)"
                     DebugLog.log(TAG, msg)
                     showResultNotification(context, msg, nextNotificationId())
                 } else {
+                    smsDao.markFailed(hash)
                     val err = response.errorBody()?.string()?.take(150) ?: "Unknown error"
                     val msg = "❌ Send failed (${response.code()}): $err"
                     DebugLog.log(TAG, msg)
                     showResultNotification(context, msg, nextNotificationId())
                 }
             } catch (e: Exception) {
+                smsDao.markFailed(hash)
                 val msg = "❌ Error: ${e.message}"
                 DebugLog.log(TAG, msg)
                 Log.e(TAG, "Auto-send failed", e)

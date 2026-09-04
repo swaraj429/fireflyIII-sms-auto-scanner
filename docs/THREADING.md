@@ -217,3 +217,5 @@ fun loadSms() {
 | ViewModel `mutableStateOf` | ✅ Yes (if used correctly) | Must only be written on main thread |
 | `ParsedTransaction` | ⚠️ Careful | `var` fields — only mutated from the UI thread in this app |
 | `NotificationHelper` | ✅ Yes | `NotificationManagerCompat` is thread-safe |
+| `SmsRecordDao` (Room) | ✅ Yes | Room handles background query execution on internal worker threads |
+| `FireflySyncEngine` | ✅ Yes | Suspend functions; caller executes on background coroutine dispatcher |

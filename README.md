@@ -66,10 +66,12 @@ Before submitting, enrich each transaction with:
 - **🏷️ Tags** — multi-select with checkboxes
 - **Description** — prefilled with clean extracted payee, fully editable
 
-### 💾 Persistent Local Storage (Room DB)
+### 💾 Persistent Local Storage & Bi-Directional Sync
 - Hash-based deduplication ensures identical SMS messages are never duplicated
 - Tracks sync status (`PENDING`, `SENT`, `FAILED`) across app restarts
 - Automatic 30-day retention pruning keeping storage lightweight
+- Full bi-directional sync logic pulls changes made directly on Firefly III back to your local history
+- Update already sent transactions right from the app — no need to switch to a browser
 
 ---
 
@@ -176,6 +178,8 @@ Contributions are what make open source great. Whether it's fixing a bug, adding
 - [x] **v0.0.1-alpha** — Real-time SMS detection, parser, and basic UI
 - [x] **v0.0.2** — Tabbed navigation, Smart Rules, and improved editor
 - [x] **v0.0.3-alpha** — Persistent SMS history (Room DB), hash-based deduplication, in-app Database Viewer, and fixed Account Auto-matching
+- [x] **v0.0.4-alpha** — Dismissal & restore workflows, advanced rule builder UI
+- [x] **v0.0.5-alpha** — Bi-directional Firefly III sync, updating sent transactions, and UI uncluttering
 - [ ] **v1.0** — Stable release + signed APK
 - [ ] Auto-send mode (skip review, send all transactions instantly)
 - [ ] Support for multiple Firefly III accounts

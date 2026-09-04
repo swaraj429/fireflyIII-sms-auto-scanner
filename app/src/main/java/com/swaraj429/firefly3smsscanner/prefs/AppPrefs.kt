@@ -32,6 +32,14 @@ class AppPrefs(context: Context) {
             DebugLog.log("PREFS", "Account ID saved: $value")
         }
 
+    /** How many days of history to retain and reconcile. Default 30, user-configurable. */
+    var syncRangeDays: Int
+        get() = prefs.getInt("sync_range_days", 30)
+        set(value) {
+            prefs.edit().putInt("sync_range_days", value.coerceIn(7, 365)).apply()
+            DebugLog.log("PREFS", "Sync range saved: $value days")
+        }
+
     val isConfigured: Boolean
         get() = baseUrl.isNotBlank() && accessToken.isNotBlank()
 

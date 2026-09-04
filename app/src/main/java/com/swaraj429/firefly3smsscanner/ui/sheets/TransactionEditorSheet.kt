@@ -56,6 +56,13 @@ fun TransactionEditorSheet(
             if (transaction.sourceAccountId != null) {
                 (fireflyData.assetAccounts + fireflyData.revenueAccounts + fireflyData.expenseAccounts)
                     .find { it.id == transaction.sourceAccountId }
+                    ?: if (transaction.sourceAccountName != null) {
+                        (fireflyData.assetAccounts + fireflyData.revenueAccounts + fireflyData.expenseAccounts)
+                            .find { it.name.equals(transaction.sourceAccountName, ignoreCase = true) }
+                    } else null
+            } else if (transaction.sourceAccountName != null) {
+                (fireflyData.assetAccounts + fireflyData.revenueAccounts + fireflyData.expenseAccounts)
+                    .find { it.name.equals(transaction.sourceAccountName, ignoreCase = true) }
             } else null
         )
     }
@@ -64,6 +71,13 @@ fun TransactionEditorSheet(
             if (transaction.destinationAccountId != null) {
                 (fireflyData.expenseAccounts + fireflyData.assetAccounts + fireflyData.revenueAccounts)
                     .find { it.id == transaction.destinationAccountId }
+                    ?: if (transaction.destinationAccountName != null) {
+                        (fireflyData.expenseAccounts + fireflyData.assetAccounts + fireflyData.revenueAccounts)
+                            .find { it.name.equals(transaction.destinationAccountName, ignoreCase = true) }
+                    } else null
+            } else if (transaction.destinationAccountName != null) {
+                (fireflyData.expenseAccounts + fireflyData.assetAccounts + fireflyData.revenueAccounts)
+                    .find { it.name.equals(transaction.destinationAccountName, ignoreCase = true) }
             } else null
         )
     }
@@ -195,6 +209,7 @@ fun TransactionEditorSheet(
                 AccountSelector(
                     accounts = sourceAccounts,
                     selectedAccount = selectedSourceAccount,
+                    fallbackName = transaction.sourceAccountName,
                     label = "Source Account",
                     onAccountSelected = { acc ->
                         selectedSourceAccount = acc
@@ -211,6 +226,7 @@ fun TransactionEditorSheet(
                 AccountSelector(
                     accounts = destAccounts,
                     selectedAccount = selectedDestAccount,
+                    fallbackName = transaction.destinationAccountName,
                     label = "Destination",
                     onAccountSelected = { acc ->
                         selectedDestAccount = acc
@@ -298,18 +314,30 @@ fun TransactionEditorSheet(
                 }
             }
 
-            // ─── Save CTA ───
+            // ─── Save / Update CTA ───
             Button(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    // Commit all edited fields into the transaction model
+                    editAmount.toDoubleOrNull()?.let { transaction.correctedAmount = it }
+                    transaction.correctedType = editType
+                    transaction.description = editDescription
+                    transaction.categoryName = selectedCategory
+                    transaction.budgetId = selectedBudgetId
+                    transaction.budgetName = selectedBudget
+                    transaction.sourceAccountId = selectedSourceAccount?.id
+                    transaction.sourceAccountName = selectedSourceAccount?.name
+                    transaction.destinationAccountId = selectedDestAccount?.id
+                    transaction.destinationAccountName = selectedDestAccount?.name
+                    transaction.selectedTags.clear()
+                    transaction.selectedTags.addAll(selectedTags)
                     onSave()
                 },
-                enabled = transaction.status != SendStatus.SENDING && transaction.status != SendStatus.SENT,
+                enabled = transaction.status != SendStatus.SENDING,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = when (transaction.status) {
-                        SendStatus.SENT -> SuccessGreen
                         SendStatus.FAILED -> ErrorCrimson
                         else -> Primary
                     }
@@ -317,7 +345,7 @@ fun TransactionEditorSheet(
             ) {
                 Icon(
                     when (transaction.status) {
-                        SendStatus.SENT -> Icons.Filled.CheckCircle
+                        SendStatus.SENT -> Icons.Filled.CloudUpload
                         SendStatus.SENDING -> Icons.Filled.Sync
                         else -> Icons.Filled.Save
                     }, null, Modifier.size(20.dp)
@@ -327,13 +355,35 @@ fun TransactionEditorSheet(
                     when (transaction.status) {
                         SendStatus.PENDING -> "Save Transaction"
                         SendStatus.SENDING -> "Saving..."
-                        SendStatus.SENT -> "Saved ✓"
+                        SendStatus.SENT -> "Update in Firefly"
                         SendStatus.FAILED -> "Retry"
                         SendStatus.DISMISSED -> "Save to Firefly"
                     },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
+            }
+
+            // ─── View in Firefly Web link ───
+            val fireflyId = transaction.fireflyTransactionId
+            if (fireflyId != null) {
+                val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val prefs = remember { com.swaraj429.firefly3smsscanner.prefs.AppPrefs(context) }
+                OutlinedButton(
+                    onClick = {
+                        val base = prefs.baseUrl.trimEnd('/')
+                        if (base.isNotBlank()) {
+                            uriHandler.openUri("$base/transactions/show/$fireflyId")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(Icons.Filled.OpenInBrowser, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("View in Firefly (#$fireflyId)", fontWeight = FontWeight.SemiBold)
+                }
             }
 
             // ─── Dismiss or Restore Action ───

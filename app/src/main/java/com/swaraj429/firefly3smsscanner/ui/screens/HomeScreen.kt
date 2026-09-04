@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.swaraj429.firefly3smsscanner.model.DismissReason
 import com.swaraj429.firefly3smsscanner.model.ParsedTransaction
@@ -34,6 +35,7 @@ import com.swaraj429.firefly3smsscanner.viewmodel.SmsHistoryViewModel
 import com.swaraj429.firefly3smsscanner.viewmodel.SmsViewModel
 import com.swaraj429.firefly3smsscanner.viewmodel.TransactionViewModel
 import com.swaraj429.firefly3smsscanner.viewmodel.RulesViewModel
+import com.swaraj429.firefly3smsscanner.viewmodel.SyncViewModel
 import com.swaraj429.firefly3smsscanner.parser.RuleEngine
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
@@ -54,6 +56,7 @@ fun HomeScreen(
     fireflyDataViewModel: FireflyDataViewModel,
     smsHistoryViewModel: SmsHistoryViewModel,
     rulesViewModel: RulesViewModel = viewModel(),
+    syncViewModel: SyncViewModel = viewModel(),
     hasSmsPermission: Boolean = false,
     onRequestPermission: () -> Unit = {}
 ) {
@@ -77,6 +80,14 @@ fun HomeScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    // Reload history and firefly metadata whenever a sync completes
+    LaunchedEffect(syncViewModel.lastSyncTime) {
+        if (syncViewModel.lastSyncTime != null) {
+            smsHistoryViewModel.loadHistory()
+            fireflyDataViewModel.refreshAll()
+        }
+    }
 
     val filters = listOf("All", "Pending", "Sent", "Failed", "Dismissed")
 
@@ -123,51 +134,85 @@ fun HomeScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    // Date range filter inside the summary tile
-                    LazyRow(
+                    // Date range filter and single Sync button
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        items(dateRangeOptions) { option ->
-                            FilterChip(
-                                selected = selectedDateRange == option.label,
-                                onClick = {
-                                    selectedDateRange = option.label
-                                    val cal = Calendar.getInstance()
-                                    smsViewModel.toDate = cal.timeInMillis
-                                    when {
-                                        option.thisMonth -> {
-                                            cal.set(Calendar.DAY_OF_MONTH, 1)
-                                            cal.set(Calendar.HOUR_OF_DAY, 0)
-                                            cal.set(Calendar.MINUTE, 0)
-                                            cal.set(Calendar.SECOND, 0)
-                                            cal.set(Calendar.MILLISECOND, 0)
+                        LazyRow(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(dateRangeOptions) { option ->
+                                FilterChip(
+                                    selected = selectedDateRange == option.label,
+                                    onClick = {
+                                        selectedDateRange = option.label
+                                        val cal = Calendar.getInstance()
+                                        smsViewModel.toDate = cal.timeInMillis
+                                        when {
+                                            option.thisMonth -> {
+                                                cal.set(Calendar.DAY_OF_MONTH, 1)
+                                                cal.set(Calendar.HOUR_OF_DAY, 0)
+                                                cal.set(Calendar.MINUTE, 0)
+                                                cal.set(Calendar.SECOND, 0)
+                                                cal.set(Calendar.MILLISECOND, 0)
+                                            }
+                                            option.days == 0 -> {
+                                                cal.set(Calendar.HOUR_OF_DAY, 0)
+                                                cal.set(Calendar.MINUTE, 0)
+                                                cal.set(Calendar.SECOND, 0)
+                                                cal.set(Calendar.MILLISECOND, 0)
+                                            }
+                                            option.days != null -> {
+                                                cal.add(Calendar.DAY_OF_YEAR, -option.days)
+                                            }
                                         }
-                                        option.days == 0 -> {
-                                            cal.set(Calendar.HOUR_OF_DAY, 0)
-                                            cal.set(Calendar.MINUTE, 0)
-                                            cal.set(Calendar.SECOND, 0)
-                                            cal.set(Calendar.MILLISECOND, 0)
+                                        smsViewModel.fromDate = cal.timeInMillis
+                                        // Auto-scan: triggers LaunchedEffect in MainActivity via smsMessages.size change
+                                        if (hasSmsPermission) {
+                                            smsViewModel.loadSmsByDateRange()
+                                        } else {
+                                            onRequestPermission()
                                         }
-                                        option.days != null -> {
-                                            cal.add(Calendar.DAY_OF_YEAR, -option.days)
-                                        }
-                                    }
-                                    smsViewModel.fromDate = cal.timeInMillis
-                                    // Auto-scan: triggers LaunchedEffect in MainActivity via smsMessages.size change
-                                    if (hasSmsPermission) {
-                                        smsViewModel.loadSmsByDateRange()
-                                    } else {
-                                        onRequestPermission()
-                                    }
-                                },
-                                label = { Text(option.label, style = MaterialTheme.typography.labelSmall) },
-                                shape = RoundedCornerShape(20.dp),
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Primary.copy(alpha = 0.15f),
-                                    selectedLabelColor = Primary
+                                    },
+                                    label = { Text(option.label, style = MaterialTheme.typography.labelSmall) },
+                                    shape = RoundedCornerShape(20.dp),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Primary.copy(alpha = 0.15f),
+                                        selectedLabelColor = Primary
+                                    )
                                 )
-                            )
+                            }
+                        }
+
+                        Spacer(Modifier.width(6.dp))
+
+                        // Single Sync button — clean, no verbose messages
+                        IconButton(
+                            onClick = {
+                                syncViewModel.runSync {
+                                    smsHistoryViewModel.loadHistory()
+                                    fireflyDataViewModel.refreshAll()
+                                }
+                            },
+                            enabled = !syncViewModel.isSyncing,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            if (syncViewModel.isSyncing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Primary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.Sync,
+                                    contentDescription = "Sync with Firefly",
+                                    tint = Primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
 

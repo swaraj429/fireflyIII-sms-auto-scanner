@@ -25,60 +25,71 @@ data class SmsMessage(
 
 ### `ParsedTransaction`
 
-The central model of the app. Starts from a parsed SMS and accumulates user-selected Firefly metadata before being submitted.
+### `ParsedTransaction`
+
+The central in-memory model of the app. Starts from a parsed SMS and accumulates user-selected Firefly metadata before being submitted or updated.
 
 ```kotlin
 data class ParsedTransaction(
-    // ── Parsed from SMS (immutable after creation) ─────────────────────────
+    // ── Parsed from SMS ──────────────────────────────────────────────────
     val amount: Double,              // Raw parsed amount
-    val type: TransactionType,       // Raw parsed type (DEBIT / CREDIT / UNKNOWN)
+    val type: TransactionType,       // WITHDRAWAL, DEPOSIT, or TRANSFER
     val rawMessage: String,          // Original SMS body — shown in Debug and as notes
-    val sender: String,              // SMS sender address
-    val timestamp: Long,             // Original SMS timestamp (used as transaction date)
+    val sender: String = "",         // SMS sender address
+    val timestamp: Long = System.currentTimeMillis(), // Original SMS timestamp
+    var paymentMode: String? = null, // "UPI", "Card", "ATM", "NetBanking"
 
     // ── User corrections ────────────────────────────────────────────────────
-    var correctedAmount: Double?,    // Set when user edits the amount field
-    var correctedType: TransactionType?,  // Set when user toggles DEBIT/CREDIT chip
+    var correctedAmount: Double? = null,
+    var correctedType: TransactionType? = null,
 
-    // ── Firefly metadata (user-selected in TransactionScreen) ────────────────
-    var description: String,         // Transaction description (defaults to "SMS: ...")
-    var categoryName: String?,       // Firefly category name (null = not set)
-    var selectedTags: MutableList<String>,  // Firefly tag names
-    var budgetId: String?,           // Firefly budget ID (null = not set)
-    var budgetName: String?,         // Display name of selected budget
-    var sourceAccountId: String?,    // Asset account ID (withdrawal source / deposit destination)
-    var sourceAccountName: String?,  // Display name
-    var destinationAccountId: String?,   // Expense account ID (withdrawal dest)
-    var destinationAccountName: String?, // Display name or free-text
+    // ── Firefly metadata (user-selected in TransactionEditorSheet) ─────────
+    var description: String = "",    // Prefilled with extracted payee, editable
+    var categoryName: String? = null,
+    var selectedTags: MutableList<String> = mutableListOf(),
+    var budgetId: String? = null,
+    var budgetName: String? = null,
+    var sourceAccountId: String? = null,
+    var sourceAccountName: String? = null,
+    var destinationAccountId: String? = null,
+    var destinationAccountName: String? = null,
 
-    // ── Tracking ─────────────────────────────────────────────────────────────
-    var status: SendStatus           // PENDING → SENDING → SENT | FAILED
+    // ── Tracking & Sync ─────────────────────────────────────────────────────
+    var status: SendStatus = SendStatus.PENDING,
+    var dismissReason: DismissReason? = null,
+    var dismissedAt: Long? = null,
+    var fireflyTransactionId: String? = null,        // Firefly group ID
+    var fireflyTransactionJournalId: String? = null, // Split journal ID (for PUT)
+    var lastSyncedAt: Long? = null,
+    var hasRemoteEdits: Boolean = false
 )
 ```
 
 **Computed properties:**
 
 ```kotlin
-val effectiveAmount: Double    // correctedAmount ?: amount
-val effectiveType: TransactionType  // correctedType ?: type
+val effectiveAmount: Double get() = correctedAmount ?: amount
+val effectiveType: TransactionType get() = correctedType ?: type
+val isExpense: Boolean get() = effectiveType == TransactionType.WITHDRAWAL
 ```
-
-These are what get sent to Firefly III — original values unless the user has corrected them.
 
 ---
 
 ### `TransactionType`
 
+Aligned with Firefly III transaction types:
+
 ```kotlin
 enum class TransactionType {
-    DEBIT,    // Money leaving the account (withdrawal in Firefly)
-    CREDIT,   // Money entering the account (deposit in Firefly)
-    UNKNOWN;  // Parser couldn't determine type (defaults to withdrawal)
+    WITHDRAWAL,  // Money leaving account (Expense) -> "withdrawal"
+    DEPOSIT,     // Money entering account (Income) -> "deposit"
+    TRANSFER;    // Between own accounts -> "transfer"
 
-    fun toFireflyType(): String = when (this) {
-        DEBIT   -> "withdrawal"
-        CREDIT  -> "deposit"
-        UNKNOWN -> "withdrawal"
+    fun toFireflyType(): String = name.lowercase()
+    fun displayLabel(): String = when (this) {
+        WITHDRAWAL -> "Expense"
+        DEPOSIT -> "Income"
+        TRANSFER -> "Transfer"
     }
 }
 ```
@@ -89,33 +100,116 @@ enum class TransactionType {
 
 ```kotlin
 enum class SendStatus {
-    PENDING,   // Transaction not yet submitted
-    SENDING,   // Network call in progress
-    SENT,      // Successfully created in Firefly III
-    FAILED     // Network or API error
+    PENDING,   // Transaction parsed but not yet submitted
+    SENDING,   // Network call in progress (POST create or PUT update)
+    SENT,      // Successfully posted/updated in Firefly III
+    FAILED,    // Network or API error occurred
+    DISMISSED  // User dismissed the transaction (e.g. duplicate or CC echo)
 }
 ```
 
-`SendStatus` drives the appearance of the "Send to Firefly" button:
+`SendStatus` drives the button label and action in `TransactionEditorSheet`:
 
-| Status | Button text | Button colour | Enabled? |
+| Status | Button label | Action | Enabled? |
 |---|---|---|---|
-| `PENDING` | "Send to Firefly" | Primary | ✅ |
-| `SENDING` | "Sending..." | Primary | ❌ |
-| `SENT` | "Sent ✓" | Green | ❌ |
-| `FAILED` | "Retry" | Error/red | ✅ |
+| `PENDING` | "Save Transaction" | `POST /api/v1/transactions` | ✅ |
+| `SENDING` | "Saving..." | In-flight request | ❌ |
+| `SENT` | "Update in Firefly" | `PUT /api/v1/transactions/{id}` | ✅ |
+| `FAILED` | "Retry" | Retry `POST` or `PUT` | ✅ |
+| `DISMISSED` | "Save to Firefly" | Restore & `POST` to Firefly | ✅ |
+
+---
+
+### `DismissReason`
+
+Tracks why a transaction was dismissed from the active inbox:
+
+```kotlin
+enum class DismissReason(
+    val title: String,
+    val description: String,
+    val badgeLabel: String
+) {
+    DUPLICATE("Duplicate Transaction", "Same transaction reported by another SMS", "Duplicate"),
+    CREDIT_CARD_ECHO("Credit Card Bill Echo", "Bank debit alert that mirrors CC bill payment", "CC Echo"),
+    UNRELATED("Unrelated / Non-Expense", "Promotional, OTP, balance inquiry, or personal text", "Unrelated"),
+    OTHER("Other", "Manually dismissed / ignored", "Dismissed");
+}
+```
+
+---
+
+---
+
+## Local Database Entities (Room)
+
+### `SmsRecordEntity`
+
+Persisted record of every transaction SMS seen by the app (`sms_records` table). Uniquely indexed on `smsHash`.
+
+```kotlin
+@Entity(
+    tableName = "sms_records",
+    indices = [Index(value = ["smsHash"], unique = true)]
+)
+data class SmsRecordEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val smsHash: String,                     // SHA-256(sender + body)
+    val sender: String,                      // e.g. "VD-HDFCBK"
+    val body: String,                        // Raw SMS text
+    val smsTimestamp: Long,                  // Epoch millis
+    val amount: Double,
+    val transactionType: String,             // "WITHDRAWAL", "DEPOSIT", "TRANSFER"
+    val description: String = "",
+
+    // Mapped Firefly Metadata
+    val sourceAccountId: String? = null,
+    val sourceAccountName: String? = null,
+    val destinationAccountId: String? = null,
+    val destinationAccountName: String? = null,
+    val categoryName: String? = null,
+    val budgetId: String? = null,
+    val budgetName: String? = null,
+    val selectedTagsCommaSeparated: String = "",
+
+    // Sync State
+    val syncStatus: String = "PENDING",      // PENDING, SENT, FAILED, DISMISSED
+    val fireflyTransactionId: String? = null,        // Group ID in Firefly
+    val fireflyTransactionJournalId: String? = null, // Split journal ID (for PUT)
+    val lastSyncedAt: Long? = null,
+
+    // Remote Shadow (reconciliation)
+    val remoteDescription: String? = null,
+    val remoteTags: String? = null,
+    val remoteCategory: String? = null,
+    val hasLocalEdits: Boolean = false,
+
+    // Dismissal
+    val dismissReason: String? = null,       // DUPLICATE, CREDIT_CARD_ECHO, etc.
+    val dismissedAt: Long? = null,
+
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+```
 
 ---
 
 ## Simplified UI Models
 
-These are derived from API responses and are what the UI works with. They contain only the fields needed for display and selection.
+These are derived from API responses and are what the UI works with:
 
 ```kotlin
 data class FireflyCategory(val id: String, val name: String)
-data class FireflyTag(val id: String, val name: String)  // name ← attributes.tag
+data class FireflyTag(val id: String, val name: String)
 data class FireflyBudget(val id: String, val name: String)
-data class FireflyAccount(val id: String, val name: String, val type: String)
+data class FireflyAccount(
+    val id: String, 
+    val name: String, 
+    val type: String,
+    val accountNumber: String? = null,
+    val accountRole: String? = null
+)
 ```
 
 ---
@@ -124,53 +218,39 @@ data class FireflyAccount(val id: String, val name: String, val type: String)
 
 ### `FireflyTransactionRequest`
 
-Top-level POST body for `POST /api/v1/transactions`.
+Top-level body for `POST /api/v1/transactions` and `PUT /api/v1/transactions/{id}`.
 
 ```kotlin
 data class FireflyTransactionRequest(
     @SerializedName("error_if_duplicate_hash")
-    val errorIfDuplicate: Boolean = false,   // Don't reject duplicate transactions
+    val errorIfDuplicate: Boolean = false,
 
     @SerializedName("apply_rules")
-    val applyRules: Boolean = true,          // Let Firefly apply automation rules
+    val applyRules: Boolean = true,
 
-    val transactions: List<FireflyTransactionSplit>  // Always a list of 1 split
+    val transactions: List<FireflyTransactionSplit>
 )
 ```
 
 ### `FireflyTransactionSplit`
 
-The individual transaction data. All optional fields are `null` when not set by the user.
+Individual split details. Required for both creation and updates:
 
 ```kotlin
 data class FireflyTransactionSplit(
     val type: String,                       // "withdrawal" or "deposit"
-    val description: String,                // User-edited or auto-generated from SMS
-    val amount: String,                     // "2500.00" — always 2 decimal places, US locale
-
-    @SerializedName("source_id")
-    val sourceId: String?,                  // Asset account ID for withdrawals
-
-    @SerializedName("destination_id")
-    val destinationId: String?,             // Asset account ID for deposits
-
-    @SerializedName("source_name")
-    val sourceName: String?,                // Free-text revenue account name for deposits
-
-    @SerializedName("destination_name")
-    val destinationName: String?,           // Free-text expense account name for withdrawals
-
-    val date: String,                       // "2025-01-15T10:30:00+05:30"
-
-    val notes: String?,                     // Contains "Auto-parsed from SMS:\n[body]"
-
-    @SerializedName("category_name")
-    val categoryName: String?,              // Selected category name
-
-    val tags: List<String>?,               // Selected tag names
-
-    @SerializedName("budget_id")
-    val budgetId: String?                   // Selected budget ID
+    val description: String,                // Payee/merchant or custom description
+    val amount: String,                     // "2500.00" — 2 decimal places, US locale
+    @SerializedName("source_id") val sourceId: String? = null,
+    @SerializedName("destination_id") val destinationId: String? = null,
+    @SerializedName("source_name") val sourceName: String? = null,
+    @SerializedName("destination_name") val destinationName: String? = null,
+    val date: String,                       // ISO 8601 ("yyyy-MM-dd'T'HH:mm:ssXXX")
+    val notes: String? = null,              // Body + "smsHash=<hash>" for reconciliation
+    @SerializedName("category_name") val categoryName: String? = null,
+    val tags: List<String>? = null,
+    @SerializedName("budget_id") val budgetId: String? = null,
+    @SerializedName("transaction_journal_id") val transactionJournalId: String? = null // Required for PUT
 )
 ```
 
@@ -179,48 +259,70 @@ data class FireflyTransactionSplit(
 ## API Response Models
 
 ### Account Response
-
 ```
 FireflyAccountsResponse
   └── data: List<FireflyAccountWrapper>
         ├── id: String
-        └── attributes: FireflyAccountAttributes
-                ├── name: String
-                ├── type: String
-                ├── accountNumber: String?   (JSON: "account_number")
-                └── currentBalance: String?  (JSON: "current_balance")
+        └── attributes: FireflyAccountAttributes (name, type, accountNumber, currentBalance)
 ```
 
 ### Category Response
-
 ```
 FireflyCategoriesResponse
   └── data: List<FireflyCategoryWrapper>
         ├── id: String
-        └── attributes: FireflyCategoryAttributes
-                └── name: String
+        └── attributes: FireflyCategoryAttributes (name)
 ```
 
 ### Tag Response
-
 ```
 FireflyTagsResponse
   └── data: List<FireflyTagWrapper>
         ├── id: String
-        └── attributes: FireflyTagAttributes
-                └── tag: String   ← mapped to FireflyTag.name in the UI
+        └── attributes: FireflyTagAttributes (tag)
 ```
 
-### Transaction Create Response
-
+### Transaction Create / Update Response
 ```kotlin
 data class FireflyTransactionResponse(
-    val data: FireflyTransactionData?   // null if error body doesn't match
+    val data: FireflyTransactionData?
+)
+data class FireflyTransactionData(
+    val id: String,      // Transaction group ID
+    val type: String     // Always "transactions"
+)
+```
+
+### Transaction List Response (Reconciliation)
+```kotlin
+data class FireflyTransactionListResponse(
+    val data: List<FireflyTransactionGroupWrapper> = emptyList(),
+    val meta: FireflyPaginationMeta? = null
 )
 
-data class FireflyTransactionData(
-    val id: String,      // The newly created transaction ID
-    val type: String     // Always "transactions"
+data class FireflyTransactionGroupWrapper(
+    val id: String,
+    val attributes: FireflyTransactionGroupAttributes
+)
+
+data class FireflyTransactionGroupAttributes(
+    val groupTitle: String? = null,
+    val transactions: List<FireflyTransactionJournal> = emptyList()
+)
+
+data class FireflyTransactionJournal(
+    val transactionJournalId: String = "",
+    val type: String = "withdrawal",
+    val description: String = "",
+    val amount: String = "0.00",
+    val date: String = "",
+    val notes: String? = null,
+    val categoryName: String? = null,
+    val budgetId: String? = null,
+    val tags: List<String>? = null,
+    val sourceId: String? = null,
+    val destinationId: String? = null,
+    val destinationName: String? = null
 )
 ```
 

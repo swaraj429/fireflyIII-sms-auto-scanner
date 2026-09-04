@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -111,6 +112,26 @@ fun TransactionCard(
                     tint = amountColor,
                     modifier = Modifier.size(22.dp)
                 )
+
+                // Small sync tick decorator in the corner
+                if (transaction.hasRemoteEdits) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(2.dp)
+                            .size(13.dp)
+                            .clip(CircleShape)
+                            .background(SuccessGreen),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = "Synced",
+                            tint = Color.White,
+                            modifier = Modifier.size(9.dp)
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.width(12.dp))
@@ -129,11 +150,18 @@ fun TransactionCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Account badge
-                    val accountName = if (isExpense) {
-                        transaction.sourceAccountName
-                    } else {
-                        transaction.destinationAccountName
+                    // Account badge (shows Source → Destination when available)
+                    val source = transaction.sourceAccountName
+                    val dest = transaction.destinationAccountName
+                    val accountName = when {
+                        isExpense && !dest.isNullOrBlank() && dest != "SMS Expense" && !source.isNullOrBlank() -> "$source → $dest"
+                        isExpense && !dest.isNullOrBlank() && dest != "SMS Expense" -> dest
+                        isExpense -> source
+                        isTransfer && !source.isNullOrBlank() && !dest.isNullOrBlank() -> "$source → $dest"
+                        isTransfer -> source ?: dest
+                        !isExpense && !source.isNullOrBlank() && source != "SMS Income" && !dest.isNullOrBlank() -> "$source → $dest"
+                        !isExpense && !dest.isNullOrBlank() -> dest
+                        else -> source ?: dest
                     }
                     if (accountName != null) {
                         Text(

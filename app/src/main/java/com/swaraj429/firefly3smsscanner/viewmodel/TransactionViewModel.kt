@@ -11,6 +11,7 @@ import com.swaraj429.firefly3smsscanner.debug.DebugLog
 import com.swaraj429.firefly3smsscanner.model.*
 import com.swaraj429.firefly3smsscanner.network.RetrofitClient
 import com.swaraj429.firefly3smsscanner.prefs.AppPrefs
+import com.swaraj429.firefly3smsscanner.util.SmsHasher
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -54,6 +55,11 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
                     "SMS Transaction: ${transaction.rawMessage.take(100)}"
                 }
 
+                val hash = SmsHasher.hash(transaction.sender, transaction.rawMessage)
+
+                val existingId = transaction.fireflyTransactionId
+                val isUpdate = !existingId.isNullOrBlank()
+
                 // Build transaction split with enriched metadata
                 val split = when (fireflyType) {
                     "withdrawal" -> FireflyTransactionSplit(
@@ -67,10 +73,11 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
                                 if (description.isNotBlank() && !description.startsWith("SMS Transaction:")) description else "SMS Expense"
                             } else null,
                         date = dateStr,
-                        notes = "Auto-parsed from SMS:\n${transaction.rawMessage}",
+                        notes = "Auto-parsed from SMS:\nsmsHash=$hash\n${transaction.rawMessage}",
                         categoryName = transaction.categoryName,
                         tags = transaction.selectedTags.ifEmpty { null },
-                        budgetId = transaction.budgetId
+                        budgetId = transaction.budgetId,
+                        transactionJournalId = transaction.fireflyTransactionJournalId
                     )
                     "deposit" -> FireflyTransactionSplit(
                         type = fireflyType,
@@ -83,10 +90,11 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
                             } else null,
                         destinationId = transaction.destinationAccountId ?: prefs.accountId,
                         date = dateStr,
-                        notes = "Auto-parsed from SMS:\n${transaction.rawMessage}",
+                        notes = "Auto-parsed from SMS:\nsmsHash=$hash\n${transaction.rawMessage}",
                         categoryName = transaction.categoryName,
                         tags = transaction.selectedTags.ifEmpty { null },
-                        budgetId = transaction.budgetId
+                        budgetId = transaction.budgetId,
+                        transactionJournalId = transaction.fireflyTransactionJournalId
                     )
                     "transfer" -> FireflyTransactionSplit(
                         type = fireflyType,
@@ -95,10 +103,11 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
                         sourceId = transaction.sourceAccountId ?: prefs.accountId,
                         destinationId = transaction.destinationAccountId,
                         date = dateStr,
-                        notes = "Auto-parsed from SMS:\n${transaction.rawMessage}",
+                        notes = "Auto-parsed from SMS:\nsmsHash=$hash\n${transaction.rawMessage}",
                         categoryName = transaction.categoryName,
                         tags = transaction.selectedTags.ifEmpty { null },
-                        budgetId = transaction.budgetId
+                        budgetId = transaction.budgetId,
+                        transactionJournalId = transaction.fireflyTransactionJournalId
                     )
                     else -> FireflyTransactionSplit(
                         type = "withdrawal",
@@ -107,10 +116,11 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
                         sourceId = transaction.sourceAccountId ?: prefs.accountId,
                         destinationName = if (description.isNotBlank() && !description.startsWith("SMS Transaction:")) description else "SMS Expense",
                         date = dateStr,
-                        notes = "Auto-parsed from SMS:\n${transaction.rawMessage}",
+                        notes = "Auto-parsed from SMS:\nsmsHash=$hash\n${transaction.rawMessage}",
                         categoryName = transaction.categoryName,
                         tags = transaction.selectedTags.ifEmpty { null },
-                        budgetId = transaction.budgetId
+                        budgetId = transaction.budgetId,
+                        transactionJournalId = transaction.fireflyTransactionJournalId
                     )
                 }
 
@@ -118,16 +128,28 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
                     transactions = listOf(split)
                 )
 
-                DebugLog.log(TAG, "POST /api/v1/transactions — type=$fireflyType, amount=${transaction.effectiveAmount}" +
-                        ", category=${transaction.categoryName}, tags=${transaction.selectedTags}")
-
-                val response = api.createTransaction(request)
+                val response = if (isUpdate) {
+                    DebugLog.log(TAG, "PUT /api/v1/transactions/$existingId — type=$fireflyType, amount=${transaction.effectiveAmount}" +
+                            ", category=${transaction.categoryName}, tags=${transaction.selectedTags}")
+                    val updateResp = api.updateTransaction(existingId!!, request)
+                    if (!updateResp.isSuccessful && updateResp.code() == 404) {
+                        DebugLog.log(TAG, "Transaction #$existingId not found on Firefly (404), falling back to POST create")
+                        api.createTransaction(request)
+                    } else {
+                        updateResp
+                    }
+                } else {
+                    DebugLog.log(TAG, "POST /api/v1/transactions — type=$fireflyType, amount=${transaction.effectiveAmount}" +
+                            ", category=${transaction.categoryName}, tags=${transaction.selectedTags}")
+                    api.createTransaction(request)
+                }
 
                 if (response.isSuccessful) {
-                    val id = response.body()?.data?.id ?: "?"
+                    val id = response.body()?.data?.id ?: existingId ?: "?"
                     transaction.status = SendStatus.SENT
-                    lastResult = "✅ Created transaction #$id"
-                    DebugLog.log(TAG, "Transaction created successfully: #$id")
+                    transaction.fireflyTransactionId = id
+                    lastResult = if (isUpdate) "✅ Updated transaction #$id" else "✅ Created transaction #$id"
+                    DebugLog.log(TAG, "Transaction ${if (isUpdate) "updated" else "created"} successfully: #$id")
 
                     // Update the history record in Room
                     historyViewModel?.markSent(transaction, id)

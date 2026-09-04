@@ -208,7 +208,7 @@ The app requests permissions in two places:
 
 1. **`POST_NOTIFICATIONS` (Android 13+)**: Requested automatically in a `LaunchedEffect(Unit)` in `MainApp()` when the app is first opened.
 
-2. **`READ_SMS` + `RECEIVE_SMS`**: Requested together when the user taps "📥 Scan SMS" on the SMS tab (only if permission hasn't been granted). This is the right UX moment — right before the user needs the permission.
+2. **`READ_SMS` + `RECEIVE_SMS`**: Requested together on first launch or when the user initiates a scan on the unified **Home** screen (only if permission hasn't been granted). This is the right UX moment — right before the user needs the permission.
 
 The `permissionLauncher` uses `RequestMultiplePermissions()` so both are requested in a single system dialog.
 

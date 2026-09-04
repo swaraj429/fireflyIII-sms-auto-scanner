@@ -61,6 +61,24 @@ data class SmsRecordEntity(
     /** Firefly III transaction ID returned after a successful POST */
     val fireflyTransactionId: String? = null,
 
+    /** Firefly transaction journal ID (the specific split/journal within a group) */
+    val fireflyTransactionJournalId: String? = null,
+
+    /** Last time this record was synced with Firefly (millis) */
+    val lastSyncedAt: Long? = null,
+
+    /** Description as it exists in Firefly (may differ from local if user edited on Firefly) */
+    val remoteDescription: String? = null,
+
+    /** Tags as they exist in Firefly (comma-separated, may differ from local) */
+    val remoteTags: String? = null,
+
+    /** Category as it exists in Firefly (may differ from local) */
+    val remoteCategory: String? = null,
+
+    /** Whether this record has unsynced local changes (edited locally but not pushed to Firefly) */
+    val hasLocalEdits: Boolean = false,
+
     /** Reason for dismissal if syncStatus is DISMISSED (e.g. DUPLICATE, CREDIT_CARD_ECHO) */
     val dismissReason: String? = null,
 

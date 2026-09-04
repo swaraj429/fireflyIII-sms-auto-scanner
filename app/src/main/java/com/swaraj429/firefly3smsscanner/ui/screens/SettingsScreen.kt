@@ -29,24 +29,28 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.swaraj429.firefly3smsscanner.db.FireflyDatabase
 import com.swaraj429.firefly3smsscanner.db.SmsRecordEntity
 import com.swaraj429.firefly3smsscanner.debug.DebugLog
+import com.swaraj429.firefly3smsscanner.prefs.AppPrefs
 import com.swaraj429.firefly3smsscanner.ui.theme.*
 import com.swaraj429.firefly3smsscanner.viewmodel.SetupViewModel
 import com.swaraj429.firefly3smsscanner.viewmodel.SmsHistoryViewModel
+import com.swaraj429.firefly3smsscanner.viewmodel.SyncViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
 /**
  * Settings screen with Connection config, Live Detection status,
- * Debug & Database section (logs, DB tables, clear).
+ * Sync & Reconciliation, Debug & Database section (logs, DB tables, clear).
  */
 @Composable
 fun SettingsScreen(
     viewModel: SetupViewModel,
-    smsHistoryViewModel: SmsHistoryViewModel? = null
+    smsHistoryViewModel: SmsHistoryViewModel? = null,
+    syncViewModel: SyncViewModel = viewModel()
 ) {
     var showToken by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -211,6 +215,145 @@ fun SettingsScreen(
                     )
                 ) {
                     Text(viewModel.connectionStatus, Modifier.padding(14.dp), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // ─── Firefly Reconciliation Section ───
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        item { SectionHeader("Sync & Reconciliation") }
+        item {
+            val prefs = remember { AppPrefs(context) }
+            var syncRange by remember { mutableStateOf(prefs.syncRangeDays) }
+            var showRangeDropdown by remember { mutableStateOf(false) }
+            val rangeOptions = listOf(7, 14, 30, 60, 90, 180, 365)
+
+            Card(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Reconcile with Firefly", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = if (syncViewModel.isSyncing) "Syncing with Firefly in background..."
+                                       else syncViewModel.syncStatusMessage.ifBlank { "Never synced" },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                syncViewModel.runSync {
+                                    smsHistoryViewModel?.loadHistory()
+                                }
+                            },
+                            enabled = !syncViewModel.isSyncing,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                        ) {
+                            if (syncViewModel.isSyncing) {
+                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = OnPrimary)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Syncing…")
+                            } else {
+                                Icon(Icons.Filled.Sync, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Sync Now")
+                            }
+                        }
+                    }
+
+                    // Last result details if available
+                    val result = syncViewModel.lastSyncResult
+                    if (result != null) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "Last Sync Summary",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Primary
+                                )
+                                Text(
+                                    text = "• Matched: ${result.matched} transactions (${result.newlyReconciled} newly reconciled, ${result.updated} updated)",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = "• Remote scanned: ${result.totalRemote} | Local scanned: ${result.totalLocal}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (result.errors.isNotEmpty()) {
+                                    Text(
+                                        text = "⚠️ Errors: ${result.errors.joinToString("; ")}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = ErrorCrimson
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    // Sync Range Dropdown / Selector
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Reconciliation Window", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                            Text("Controls how far back sync and history retention check", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        Box {
+                            OutlinedButton(
+                                onClick = { showRangeDropdown = true },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("$syncRange days", style = MaterialTheme.typography.labelMedium)
+                                Spacer(Modifier.width(4.dp))
+                                Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(16.dp))
+                            }
+
+                            DropdownMenu(
+                                expanded = showRangeDropdown,
+                                onDismissRequest = { showRangeDropdown = false }
+                            ) {
+                                rangeOptions.forEach { days ->
+                                    DropdownMenuItem(
+                                        text = { Text("$days days") },
+                                        onClick = {
+                                            syncRange = days
+                                            prefs.syncRangeDays = days
+                                            showRangeDropdown = false
+                                            smsHistoryViewModel?.loadHistory()
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = "ℹ️ Auto-sync triggers on app launch if last sync is older than 12 hours. Firefly always wins conflicts for description, tags, and category.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
