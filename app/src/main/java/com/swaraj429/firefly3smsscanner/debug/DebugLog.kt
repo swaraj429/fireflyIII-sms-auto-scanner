@@ -4,9 +4,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.CopyOnWriteArrayList
@@ -33,12 +30,6 @@ object DebugLog {
     // Observable list for Compose UI — only mutated on main thread
     val entries = mutableStateListOf<Entry>()
 
-    // Last HTTP request/response for debug panel
-    var lastRequest: String by mutableStateOf("(none)")
-        private set
-    var lastResponse: String by mutableStateOf("(none)")
-        private set
-
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private fun threadSafeDateFormat(): SimpleDateFormat =
@@ -62,32 +53,10 @@ object DebugLog {
         }
     }
 
-    fun logRequest(url: String, method: String, body: String?) {
-        val msg = buildString {
-            appendLine("→ $method $url")
-            if (body != null) appendLine("Body: $body")
-        }
-        postToMain { lastRequest = msg }
-        log("HTTP", msg)
-    }
-
-    fun logResponse(code: Int, url: String, body: String?) {
-        val msg = buildString {
-            appendLine("← $code $url")
-            if (body != null) {
-                appendLine("Body: ${body.take(2000)}") // truncate huge responses
-            }
-        }
-        postToMain { lastResponse = msg }
-        log("HTTP", msg)
-    }
-
     fun clear() {
         _entries.clear()
         postToMain {
             entries.clear()
-            lastRequest = "(none)"
-            lastResponse = "(none)"
         }
         Log.d(TAG, "Debug log cleared")
     }

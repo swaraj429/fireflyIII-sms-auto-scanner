@@ -26,7 +26,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
     val parsedTransactions = mutableStateListOf<ParsedTransaction>()
     var isLoading by mutableStateOf(false)
     var statusMessage by mutableStateOf("")
-    var usingSampleData by mutableStateOf(false)
 
     // Date range state — default to This Month (1st of current month to now)
     var fromDate by mutableStateOf(
@@ -57,7 +56,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
             smsMessages.addAll(messages)
 
             statusMessage = "Loaded ${messages.size} messages"
-            usingSampleData = false
             DebugLog.log(TAG, "Loaded ${messages.size} SMS messages for date range")
         } catch (e: Exception) {
             statusMessage = "❌ Error: ${e.message}"
@@ -65,18 +63,6 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         } finally {
             isLoading = false
         }
-    }
-
-    fun loadSampleSms() {
-        DebugLog.log(TAG, "Loading sample SMS data for testing...")
-
-        val samples = SmsParser.getSampleMessages()
-        smsMessages.clear()
-        smsMessages.addAll(samples)
-
-        statusMessage = "Loaded ${samples.size} sample messages"
-        usingSampleData = true
-        DebugLog.log(TAG, "Loaded ${samples.size} sample messages")
     }
 
     /**

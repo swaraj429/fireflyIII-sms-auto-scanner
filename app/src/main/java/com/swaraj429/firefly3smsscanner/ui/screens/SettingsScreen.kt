@@ -475,34 +475,6 @@ fun SettingsScreen(
                     if (showLogs) {
                         HorizontalDivider(Modifier.padding(vertical = 4.dp))
 
-                        // Last Request
-                        Text("Last Request", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                        Text(
-                            DebugLog.lastRequest,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            maxLines = 4,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.horizontalScroll(rememberScrollState())
-                        )
-
-                        Spacer(Modifier.height(4.dp))
-
-                        // Last Response
-                        Text("Last Response", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                        Text(
-                            DebugLog.lastResponse,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            maxLines = 4,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.horizontalScroll(rememberScrollState())
-                        )
-
-                        HorizontalDivider(Modifier.padding(vertical = 4.dp))
-
                         // Clear logs
                         TextButton(onClick = { DebugLog.clear() }) {
                             Icon(Icons.Filled.Delete, null, Modifier.size(16.dp))

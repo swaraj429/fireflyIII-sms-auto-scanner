@@ -223,7 +223,6 @@ fun MainApp(
     ) {
         if (smsViewModel.smsMessages.isEmpty()) return@LaunchedEffect
         if (!fireflyDataViewModel.isCacheLoaded) return@LaunchedEffect
-        if (smsViewModel.usingSampleData) return@LaunchedEffect
 
         // Don't parse with empty accounts if a sync is still in progress —
         // wait for the next re-trigger when accounts arrive.

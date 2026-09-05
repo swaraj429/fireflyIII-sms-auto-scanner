@@ -150,29 +150,7 @@ interface SmsRecordDao {
 
     // ── Reconciliation Queries ──────────────────────────────────
 
-    /**
-     * Get all SENT records that have a fireflyTransactionId.
-     * Used by the reconciliation engine to find records that need syncing.
-     */
-    @Query("""
-        SELECT * FROM sms_records 
-        WHERE syncStatus = 'SENT' 
-        AND fireflyTransactionId IS NOT NULL
-        AND smsTimestamp >= :cutoffMillis
-        ORDER BY smsTimestamp DESC
-    """)
-    suspend fun getSentRecordsWithFireflyId(cutoffMillis: Long): List<SmsRecordEntity>
 
-    /**
-     * Get all PENDING records (for reinstall reconciliation — need to check if they exist in Firefly).
-     */
-    @Query("""
-        SELECT * FROM sms_records 
-        WHERE syncStatus = 'PENDING'
-        AND smsTimestamp >= :cutoffMillis
-        ORDER BY smsTimestamp DESC
-    """)
-    suspend fun getPendingRecords(cutoffMillis: Long): List<SmsRecordEntity>
 
     /**
      * Find a record by its SMS hash.
@@ -224,32 +202,7 @@ interface SmsRecordDao {
         now: Long = System.currentTimeMillis()
     )
 
-    /**
-     * Reconcile a PENDING record to SENT (discovered during reinstall reconciliation).
-     * Overwrites local fields with Firefly's canonical values.
-     */
-    suspend fun reconcilePendingToSent(
-        hash: String,
-        fireflyGroupId: String,
-        fireflyJournalId: String,
-        remoteDescription: String?,
-        remoteTags: String?,
-        remoteCategory: String?,
-        sourceAccountId: String?,
-        sourceAccountName: String?,
-        destinationAccountId: String?,
-        destinationAccountName: String?,
-        budgetId: String?,
-        budgetName: String?,
-        transactionType: String?,
-        now: Long = System.currentTimeMillis()
-    ) = updateFromFirefly(
-        hash, fireflyGroupId, fireflyJournalId,
-        remoteDescription, remoteTags, remoteCategory,
-        sourceAccountId, sourceAccountName,
-        destinationAccountId, destinationAccountName,
-        budgetId, budgetName, transactionType, now
-    )
+
 
     /**
      * Get the latest lastSyncedAt timestamp across all records.

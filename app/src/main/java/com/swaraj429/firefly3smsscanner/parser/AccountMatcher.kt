@@ -1,6 +1,5 @@
 package com.swaraj429.firefly3smsscanner.parser
 
-import com.swaraj429.firefly3smsscanner.debug.DebugLog
 import com.swaraj429.firefly3smsscanner.model.FireflyAccount
 
 enum class ConfidenceScore(val value: Int) {
@@ -54,7 +53,6 @@ data class AccountMatcherConfig(
  * Automatically detects which Firefly account a transaction belongs to by analyzing SMS content.
  */
 class AccountMatcher(private val config: AccountMatcherConfig = AccountMatcherConfig()) {
-    private val TAG = "AccountMatcher"
 
     // Patterns for matching account numbers: e.g., XX1234, **5678, ...6818, ending 1234, a/c 1234
     private val accountMaskPatterns = listOf(
@@ -77,14 +75,11 @@ class AccountMatcher(private val config: AccountMatcherConfig = AccountMatcherCo
         val upperBody = smsBody.uppercase()
         val candidates = mutableListOf<AccountMatchResult>()
 
-        DebugLog.log(TAG, "Starting matching engine for SMS: ${smsBody.take(40)}...")
-
         // 1. Wallet matching (Exact Keyword matching)
         for ((keyword, walletName) in config.walletKeywords) {
             if (upperBody.contains(keyword.uppercase())) {
                 val matchedAccount = accounts.find { it.name.contains(walletName, ignoreCase = true) }
                 if (matchedAccount != null) {
-                    DebugLog.log(TAG, "  → Wallet match found: $keyword -> ${matchedAccount.name}")
                     candidates.add(AccountMatchResult(matchedAccount, ConfidenceScore.HIGH, "Wallet Keyword: $keyword"))
                 }
             }
@@ -92,22 +87,16 @@ class AccountMatcher(private val config: AccountMatcherConfig = AccountMatcherCo
 
         // 2. Account number fragment matching
         val extractedFragments = extractAccountFragments(smsBody)
-        if (extractedFragments.isNotEmpty()) {
-            DebugLog.log(TAG, "  → Extracted number fragments: $extractedFragments")
-        }
 
         for (fragment in extractedFragments) {
             for (account in accounts) {
                 val accNum = account.accountNumber?.replace(Regex("""\D"""), "") ?: ""
                 if (accNum.isNotEmpty()) {
                     if (accNum.endsWith(fragment)) {
-                        DebugLog.log(TAG, "  → Account suffix match: $fragment -> ${account.name}")
                         candidates.add(AccountMatchResult(account, ConfidenceScore.HIGH, "Account Suffix Match: $fragment"))
                     } else if (accNum.startsWith(fragment)) {
-                        DebugLog.log(TAG, "  → Account prefix match: $fragment -> ${account.name}")
                         candidates.add(AccountMatchResult(account, ConfidenceScore.MEDIUM, "Account Prefix Match: $fragment"))
                     } else if (accNum.contains(fragment)) {
-                        DebugLog.log(TAG, "  → Account partial match: $fragment -> ${account.name}")
                         candidates.add(AccountMatchResult(account, ConfidenceScore.LOW, "Account Partial Match: $fragment"))
                     }
                 }
@@ -119,7 +108,6 @@ class AccountMatcher(private val config: AccountMatcherConfig = AccountMatcherCo
             if (upperBody.contains(alias.uppercase())) {
                 val matchedAccount = accounts.find { it.name.equals(realName, ignoreCase = true) }
                 if (matchedAccount != null) {
-                    DebugLog.log(TAG, "  → Alias match: $alias -> ${matchedAccount.name}")
                     candidates.add(AccountMatchResult(matchedAccount, ConfidenceScore.HIGH, "Alias Match: $alias"))
                 }
             }
@@ -133,7 +121,6 @@ class AccountMatcher(private val config: AccountMatcherConfig = AccountMatcherCo
                 if (matchedAccounts.size == 1) {
                     val account = matchedAccounts.first()
                     if (candidates.none { it.account.id == account.id }) {
-                        DebugLog.log(TAG, "  → Bank keyword match: $keyword -> ${account.name}")
                         candidates.add(AccountMatchResult(account, ConfidenceScore.MEDIUM, "Bank Keyword Match: $keyword"))
                     }
                 }
@@ -150,25 +137,17 @@ class AccountMatcher(private val config: AccountMatcherConfig = AccountMatcherCo
                 (it.accountRole.equals("ccAsset", ignoreCase = true) || it.name.contains("credit", ignoreCase = true)) 
             }
             if (ccAccounts.size == 1 && candidates.isEmpty()) {
-                DebugLog.log(TAG, "  → Single Credit Card account fallback -> ${ccAccounts.first().name}")
                 candidates.add(AccountMatchResult(ccAccounts.first(), ConfidenceScore.LOW, "Credit Card Fallback"))
             }
         }
 
         // Resolution
         if (candidates.isEmpty()) {
-            DebugLog.log(TAG, "  → No account match found.")
             return null
         }
 
         // Group by account to handle multiple matches. We will pick the account with the highest score
-        val bestCandidate = candidates.maxByOrNull { it.confidence.value }
-
-        if (bestCandidate != null) {
-            DebugLog.log(TAG, "  → Best match chosen: ${bestCandidate.account.name} | Score: ${bestCandidate.confidence} | Reason: ${bestCandidate.reason}")
-        }
-
-        return bestCandidate
+        return candidates.maxByOrNull { it.confidence.value }
     }
 
     /**

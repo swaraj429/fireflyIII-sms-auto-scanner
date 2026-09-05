@@ -18,11 +18,11 @@ object RetrofitClient {
     fun create(baseUrl: String, accessToken: String): FireflyApi {
         DebugLog.log(TAG, "Creating Retrofit client for: $baseUrl")
 
-        // Standard OkHttp logging interceptor (BODY level = everything)
+        // Standard OkHttp logging interceptor (BASIC level)
         val loggingInterceptor = HttpLoggingInterceptor { message ->
             DebugLog.log("OkHttp", message)
         }.apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = HttpLoggingInterceptor.Level.BASIC
         }
 
         // Auth interceptor
@@ -33,38 +33,11 @@ object RetrofitClient {
                 .addHeader("Content-Type", "application/json")
                 .build()
 
-            // Log to our debug panel
-            val body = request.body?.let { "has body (${it.contentLength()} bytes)" } ?: "no body"
-            DebugLog.logRequest(
-                request.url.toString(),
-                request.method,
-                body
-            )
-
-            val response = chain.proceed(request)
-
-            // We'll log the response in the logging interceptor
-            response
-        }
-
-        // Custom response logging interceptor
-        val responseLogInterceptor = Interceptor { chain ->
-            val response = chain.proceed(chain.request())
-
-            // Peek the response body for debug panel (without consuming it)
-            val responseBody = response.peekBody(10240) // 10KB max peek
-            DebugLog.logResponse(
-                response.code,
-                response.request.url.toString(),
-                responseBody.string()
-            )
-
-            response
+            chain.proceed(request)
         }
 
         val client = OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
-            .addInterceptor(responseLogInterceptor)
             .addInterceptor(loggingInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
