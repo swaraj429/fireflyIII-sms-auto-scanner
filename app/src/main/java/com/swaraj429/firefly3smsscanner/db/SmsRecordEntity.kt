@@ -19,7 +19,10 @@ import androidx.room.PrimaryKey
  */
 @Entity(
     tableName = "sms_records",
-    indices = [Index(value = ["smsHash"], unique = true)]
+    indices = [
+        Index(value = ["smsHash"], unique = true),
+        Index(value = ["vendor"])
+    ]
 )
 data class SmsRecordEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -41,6 +44,9 @@ data class SmsRecordEntity(
 
     /** "WITHDRAWAL", "DEPOSIT", or "TRANSFER" */
     val transactionType: String,
+
+    /** Detected vendor or merchant name (e.g., "Mayur Super Market", "Swiggy") */
+    val vendor: String? = null,
 
     /** User-editable description (may be empty) */
     val description: String = "",

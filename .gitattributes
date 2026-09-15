@@ -1,0 +1,52 @@
+# Auto-detect text files and normalize line endings to LF
+* text=auto eol=lf
+
+# Kotlin & Java
+*.kt text eol=lf
+*.kts text eol=lf
+*.java text eol=lf
+
+# Build & Configuration
+*.gradle text eol=lf
+*.properties text eol=lf
+*.pro text eol=lf
+*.xml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+
+# Web & Docs
+*.md text eol=lf
+*.txt text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+LICENSE text eol=lf
+CNAME text eol=lf
+
+# Shell Scripts
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Windows Scripts
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Git Config
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.jar binary
+*.keystore binary
+*.jks binary
+*.so binary
+*.dll binary
+*.exe binary

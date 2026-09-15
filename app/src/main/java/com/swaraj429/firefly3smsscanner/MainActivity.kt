@@ -141,6 +141,7 @@ fun MainApp(
     val smsHistoryViewModel: SmsHistoryViewModel = viewModel()
     val rulesViewModel: RulesViewModel = viewModel()
     val syncViewModel: SyncViewModel = viewModel()
+    val vendorsViewModel: VendorsViewModel = viewModel()
 
     // SMS permissions (READ + RECEIVE)
     var hasSmsPermission by remember {
@@ -231,7 +232,8 @@ fun MainApp(
                 fireflyDataViewModel.revenueAccounts
         if (accounts.isEmpty() && fireflyDataViewModel.isLoading) return@LaunchedEffect
 
-        smsViewModel.parseMessages(accounts, smsHistoryViewModel)
+        smsViewModel.parseMessages(accounts, rulesViewModel.rules, smsHistoryViewModel)
+        vendorsViewModel.loadVendors(rules = rulesViewModel.rules, inMemoryTransactions = smsViewModel.parsedTransactions)
     }
 
     // ── Handle notification tap ───────────────────────────────────────────────
@@ -331,7 +333,8 @@ fun MainApp(
             composable(Screen.Rules.route) {
                 RulesScreen(
                     rulesViewModel = rulesViewModel,
-                    fireflyDataViewModel = fireflyDataViewModel
+                    fireflyDataViewModel = fireflyDataViewModel,
+                    vendorsViewModel = vendorsViewModel
                 )
             }
 

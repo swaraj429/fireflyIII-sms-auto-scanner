@@ -11,6 +11,11 @@ data class ParsedTransaction(
     val timestamp: Long = System.currentTimeMillis(),
     // Payment mode (e.g. "UPI", "Card", "ATM", "NetBanking")
     var paymentMode: String? = null,
+    // Auto-detected vendor / merchant name
+    var vendor: String? = null,
+    // Whether a matching rule flagged this transaction for auto-sending to Firefly
+    var autoSendToFirefly: Boolean = false,
+    var matchedRuleKeyword: String? = null,
     // Mutable for user corrections
     var correctedAmount: Double? = null,
     var correctedType: TransactionType? = null,

@@ -14,3 +14,10 @@ local.properties
 *.keystore
 keystore.properties
 sms_imports/
+/caches
+/android
+/daemon
+/jdks
+/kotlin-profile
+/native
+/wrapper

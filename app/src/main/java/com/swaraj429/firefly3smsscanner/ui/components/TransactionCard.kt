@@ -219,8 +219,22 @@ fun TransactionCard(
                     fontWeight = FontWeight.Bold,
                     color = amountColor
                 )
-                Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (transaction.autoSendToFirefly && transaction.status == SendStatus.PENDING) {
+                        Surface(
+                            color = Primary.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Row(
+                                Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Filled.Bolt, null, Modifier.size(10.dp), tint = Primary)
+                                Text("AUTO", style = MaterialTheme.typography.labelSmall, color = Primary, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Spacer(Modifier.width(4.dp))
+                    }
                     StatusBadge(
                         status = transaction.status,
                         compact = true,

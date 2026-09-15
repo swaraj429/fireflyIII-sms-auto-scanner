@@ -38,10 +38,30 @@ class RulesViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             // Seed with example rules on first launch
             rules.addAll(listOf(
-                ParsingRule(keyword = "SWIGGY", categoryName = "Food & Dining", tags = listOf("food-delivery")),
-                ParsingRule(keyword = "AMAZON", categoryName = "Shopping", tags = listOf("online")),
-                ParsingRule(keyword = "UBER", categoryName = "Transport", tags = listOf("ride")),
-                ParsingRule(keyword = "NETFLIX", categoryName = "Entertainment", tags = listOf("subscription")),
+                ParsingRule(
+                    keyword = "SWIGGY",
+                    categoryName = "Food & Dining",
+                    tags = listOf("food-delivery"),
+                    descriptionTemplate = "{vendor} food order"
+                ),
+                ParsingRule(
+                    keyword = "AMAZON",
+                    categoryName = "Shopping",
+                    tags = listOf("online"),
+                    descriptionTemplate = "{vendor} spent {amount}"
+                ),
+                ParsingRule(
+                    keyword = "UBER",
+                    categoryName = "Transport",
+                    tags = listOf("ride"),
+                    descriptionTemplate = "{vendor} ride {amount}"
+                ),
+                ParsingRule(
+                    keyword = "NETFLIX",
+                    categoryName = "Entertainment",
+                    tags = listOf("subscription"),
+                    descriptionTemplate = "{vendor} subscription"
+                ),
             ))
             saveRules()
             DebugLog.log(TAG, "Seeded ${rules.size} default rules")
@@ -77,6 +97,34 @@ class RulesViewModel(application: Application) : AndroidViewModel(application) {
         if (idx >= 0) {
             rules[idx] = rules[idx].copy(isEnabled = enabled)
             saveRules()
+        }
+    }
+
+    /**
+     * Checks if an active rule exists matching the given vendor name.
+     */
+    fun hasRuleForVendor(vendorName: String): Boolean {
+        if (vendorName.isBlank()) return false
+        val clean = vendorName.trim()
+        return rules.any { rule ->
+            rule.isEnabled && (
+                rule.keyword.equals(clean, ignoreCase = true) ||
+                clean.contains(rule.keyword, ignoreCase = true) ||
+                rule.keyword.contains(clean, ignoreCase = true)
+            )
+        }
+    }
+
+    /**
+     * Finds the first rule matching the given vendor name.
+     */
+    fun getRuleForVendor(vendorName: String): ParsingRule? {
+        if (vendorName.isBlank()) return null
+        val clean = vendorName.trim()
+        return rules.firstOrNull { rule ->
+            rule.keyword.equals(clean, ignoreCase = true) ||
+            clean.contains(rule.keyword, ignoreCase = true) ||
+            rule.keyword.contains(clean, ignoreCase = true)
         }
     }
 }

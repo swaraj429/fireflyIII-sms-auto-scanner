@@ -126,4 +126,29 @@ class DescriptionExtractorTest {
         assertFalse(DescriptionExtractor.isRawSenderOrEmpty("Flipkart", "BOBTXN"))
         assertFalse(DescriptionExtractor.isRawSenderOrEmpty("Amazon shopping", "VM-ICICIT"))
     }
+
+    @Test
+    fun `test extractVendor identifies merchants cleanly and filters out fallbacks`() {
+        val cardSms = "Rs 450.00 spent on your Card ending 1234 at Mayur Super Market on 04-Sep-26. Avl Lmt: 40000."
+        val vendor = DescriptionExtractor.extractVendor(cardSms, "HDFCBK")
+        assertEquals("Mayur Super Market", vendor)
+
+        val upiSms = "Paid Rs. 350.00 to Swiggy using UPI Ref 12345678."
+        val upiVendor = DescriptionExtractor.extractVendor(upiSms, "SBIUPI")
+        assertEquals("Swiggy", upiVendor)
+
+        val simplSms = "You made a purchase of Rs. 420.00 at Blinkit using Simpl."
+        val simplVendor = DescriptionExtractor.extractVendor(simplSms, "SMPLPL")
+        assertEquals("Blinkit", simplVendor)
+
+        // Non-vendor fallbacks should return null
+        val atmSms = "Rs 2000.00 withdrawn from ATM using Card XX1234 on 02-Sep-26."
+        val atmVendor = DescriptionExtractor.extractVendor(atmSms, "BOBTXN")
+        assertEquals(null, atmVendor)
+
+        val fallbackSms = "Your a/c no. XX6818 is debited for Rs.200.00 on 10-Feb-26."
+        val fallbackVendor = DescriptionExtractor.extractVendor(fallbackSms, "AD-BOBTXN")
+        assertEquals(null, fallbackVendor)
+    }
 }
+

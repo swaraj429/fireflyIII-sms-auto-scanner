@@ -237,4 +237,44 @@ interface SmsRecordDao {
      */
     @Query("DELETE FROM sms_records")
     suspend fun deleteAll()
+
+    // ── Vendor Directory ─────────────────────────────────────────────────────
+
+    /**
+     * Aggregates all unique vendors detected across SMS records, ordered by most recently seen.
+     */
+    @Query("""
+        SELECT vendor, COUNT(*) as txnCount, MAX(smsTimestamp) as lastSeen,
+               (SELECT amount FROM sms_records s2 WHERE s2.vendor = s1.vendor ORDER BY smsTimestamp DESC LIMIT 1) as lastAmount,
+               (SELECT body FROM sms_records s3 WHERE s3.vendor = s1.vendor ORDER BY smsTimestamp DESC LIMIT 1) as sampleMessage
+        FROM sms_records s1
+        WHERE vendor IS NOT NULL AND TRIM(vendor) != ''
+        GROUP BY vendor
+        ORDER BY MAX(smsTimestamp) DESC
+    """)
+    suspend fun getDetectedVendors(): List<DetectedVendorSummary>
+
+    /**
+     * Update vendor for a specific SMS record by hash (useful during backfill).
+     */
+    @Query("UPDATE sms_records SET vendor = :vendor WHERE smsHash = :hash")
+    suspend fun updateVendor(hash: String, vendor: String)
+
+    /**
+     * Get records where vendor is NULL or empty (for backfill).
+     */
+    @Query("SELECT * FROM sms_records WHERE vendor IS NULL OR TRIM(vendor) = ''")
+    suspend fun getRecordsWithoutVendor(): List<SmsRecordEntity>
 }
+
+/**
+ * Summary projection of a detected vendor aggregated from SMS records.
+ */
+data class DetectedVendorSummary(
+    val vendor: String,
+    val txnCount: Int,
+    val lastSeen: Long,
+    val lastAmount: Double?,
+    val sampleMessage: String?
+)
+

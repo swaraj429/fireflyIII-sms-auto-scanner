@@ -11,5 +11,8 @@ data class ParsingRule(
     val destinationAccountId: String? = null,
     val destinationAccountName: String = "",
     val tags: List<String> = emptyList(),
-    val isEnabled: Boolean = true
+    val isEnabled: Boolean = true,
+    val descriptionTemplate: String = "",
+    val autoSendToFirefly: Boolean = false
 )
+
