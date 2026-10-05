@@ -22,6 +22,8 @@ import com.swaraj429.firefly3smsscanner.model.SendStatus
 import com.swaraj429.firefly3smsscanner.model.SmsMessage
 import com.swaraj429.firefly3smsscanner.model.TransactionType
 import com.swaraj429.firefly3smsscanner.network.RetrofitClient
+import com.swaraj429.firefly3smsscanner.model.FireflyAccount
+import com.swaraj429.firefly3smsscanner.parser.AccountMatcher
 import com.swaraj429.firefly3smsscanner.parser.RuleEngine
 import com.swaraj429.firefly3smsscanner.parser.SmsParser
 import com.swaraj429.firefly3smsscanner.prefs.AppPrefs
@@ -63,88 +65,136 @@ class SmsReceiver : BroadcastReceiver() {
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
         if (messages.isEmpty()) return
 
-        for (smsMessage in messages) {
-            val sender = smsMessage.displayOriginatingAddress ?: continue
-            val body = smsMessage.messageBody ?: continue
-            val timestamp = smsMessage.timestampMillis
+        // Snapshot raw SMS data before going async (SmsMessage objects are safe to read after)
+        data class RawSms(val sender: String, val body: String, val timestamp: Long)
+        val rawSmsList = messages.mapNotNull { msg ->
+            val sender = msg.displayOriginatingAddress ?: return@mapNotNull null
+            val body = msg.messageBody ?: return@mapNotNull null
+            RawSms(sender, body, msg.timestampMillis)
+        }
+        if (rawSmsList.isEmpty()) return
 
-            DebugLog.log(TAG, "SMS received from $sender: ${body.take(60)}...")
-
-            val sms = SmsMessage(
-                sender = sender,
-                body = body,
-                timestamp = timestamp,
-                dateString = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-                    .format(Date(timestamp))
-            )
-
-            val transaction = SmsParser.parse(sms)
-            if (transaction == null) {
-                DebugLog.log(TAG, "  → Not a transaction SMS, skipping")
-                continue
-            }
-
-            // Load and apply smart rules
-            val rulesPrefs = context.getSharedPreferences("firefly_rules", Context.MODE_PRIVATE)
-            val rulesJson = rulesPrefs.getString("rules_json", null)
-            val rules: List<ParsingRule> = if (rulesJson != null) {
-                try {
-                    val type = object : TypeToken<List<ParsingRule>>() {}.type
-                    Gson().fromJson(rulesJson, type) ?: emptyList()
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // Pre-load cached accounts once for the whole batch (no network call needed)
+                val db = FireflyDatabase.getDatabase(context)
+                val cachedAccounts: List<FireflyAccount> = try {
+                    db.fireflyDao().getAccountsByType("asset").map { cached ->
+                        FireflyAccount(
+                            id = cached.id,
+                            name = cached.name,
+                            type = cached.type,
+                            accountNumber = cached.accountNumber,
+                            accountRole = cached.accountRole
+                        )
+                    }
                 } catch (e: Exception) {
+                    DebugLog.log(TAG, "Could not load cached accounts: ${e.message}")
                     emptyList()
                 }
-            } else emptyList()
+                DebugLog.log(TAG, "Loaded ${cachedAccounts.size} cached accounts for matching")
 
-            RuleEngine.applyRules(transaction, rules)
+                // Load rules once for the batch
+                val rulesPrefs = context.getSharedPreferences("firefly_rules", Context.MODE_PRIVATE)
+                val rulesJson = rulesPrefs.getString("rules_json", null)
+                val rules: List<ParsingRule> = if (rulesJson != null) {
+                    try {
+                        val type = object : TypeToken<List<ParsingRule>>() {}.type
+                        Gson().fromJson(rulesJson, type) ?: emptyList()
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                } else emptyList()
 
-            DebugLog.log(TAG, "  → Transaction: ₹${transaction.effectiveAmount} ${transaction.effectiveType}, autoSend=${transaction.autoSendToFirefly}, vendor=${transaction.vendor}")
+                for (raw in rawSmsList) {
+                    DebugLog.log(TAG, "SMS received from ${raw.sender}: ${raw.body.take(60)}...")
 
-            val prefs = AppPrefs(context)
-            if (transaction.autoSendToFirefly) {
-                if (prefs.isConfigured) {
-                    autoSendTransaction(context, transaction)
-                } else {
-                    DebugLog.log(TAG, "Auto-send rule matched but Firefly not configured")
-                    savePendingToDb(context, transaction)
-                    NotificationHelper.showTransactionNotification(context, transaction, nextNotificationId())
+                    val sms = SmsMessage(
+                        sender = raw.sender,
+                        body = raw.body,
+                        timestamp = raw.timestamp,
+                        dateString = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+                            .format(Date(raw.timestamp))
+                    )
+
+                    val transaction = SmsParser.parse(sms)
+                    if (transaction == null) {
+                        DebugLog.log(TAG, "  → Not a transaction SMS, skipping")
+                        continue
+                    }
+
+                    // [1] Account matching from local cache — no network required
+                    if (cachedAccounts.isNotEmpty()) {
+                        val matcher = AccountMatcher()
+                        val match = matcher.findBestMatch(raw.body, cachedAccounts)
+                        if (match != null) {
+                            if (transaction.effectiveType == TransactionType.WITHDRAWAL) {
+                                transaction.sourceAccountId = match.account.id
+                                transaction.sourceAccountName = match.account.name
+                            } else {
+                                transaction.destinationAccountId = match.account.id
+                                transaction.destinationAccountName = match.account.name
+                            }
+                            DebugLog.log(TAG, "  → Account matched: ${match.account.name} (${match.confidence}, ${match.reason})")
+                        } else {
+                            DebugLog.log(TAG, "  → No account match found from ${cachedAccounts.size} cached accounts")
+                        }
+                    } else {
+                        DebugLog.log(TAG, "  → No cached accounts — skipping account matching")
+                    }
+
+                    // [2] Apply smart rules last — can override account, category, tags, description
+                    RuleEngine.applyRules(transaction, rules)
+
+                    DebugLog.log(TAG, "  → Transaction: ₹${transaction.effectiveAmount} ${transaction.effectiveType}, autoSend=${transaction.autoSendToFirefly}, vendor=${transaction.vendor}")
+
+                    val prefs = AppPrefs(context)
+                    if (transaction.autoSendToFirefly) {
+                        if (prefs.isConfigured) {
+                            autoSendTransaction(context, transaction)
+                        } else {
+                            DebugLog.log(TAG, "Auto-send rule matched but Firefly not configured")
+                            savePendingToDb(context, transaction)
+                            NotificationHelper.showTransactionNotification(context, transaction, nextNotificationId())
+                        }
+                    } else {
+                        savePendingToDb(context, transaction)
+                        NotificationHelper.showTransactionNotification(context, transaction, nextNotificationId())
+                    }
                 }
-            } else {
-                savePendingToDb(context, transaction)
-                NotificationHelper.showTransactionNotification(context, transaction, nextNotificationId())
+            } finally {
+                pendingResult.finish()
             }
         }
     }
 
-    private fun savePendingToDb(context: Context, transaction: ParsedTransaction) {
-        val pendingResult = goAsync()
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val db = FireflyDatabase.getDatabase(context)
-                val smsDao = db.smsRecordDao()
-                val hash = SmsHasher.hash(transaction.sender, transaction.rawMessage)
-                smsDao.insertRecord(
-                    SmsRecordEntity(
-                        smsHash = hash,
-                        sender = transaction.sender,
-                        body = transaction.rawMessage,
-                        smsTimestamp = transaction.timestamp,
-                        amount = transaction.effectiveAmount,
-                        transactionType = transaction.effectiveType.name,
-                        vendor = transaction.vendor,
-                        description = transaction.description,
-                        categoryName = transaction.categoryName,
-                        destinationAccountId = transaction.destinationAccountId,
-                        destinationAccountName = transaction.destinationAccountName,
-                        selectedTagsCommaSeparated = transaction.selectedTags.joinToString(","),
-                        syncStatus = "PENDING"
-                    )
+    private suspend fun savePendingToDb(context: Context, transaction: ParsedTransaction) {
+        try {
+            val db = FireflyDatabase.getDatabase(context)
+            val smsDao = db.smsRecordDao()
+            val hash = SmsHasher.hash(transaction.sender, transaction.rawMessage)
+            smsDao.insertRecord(
+                SmsRecordEntity(
+                    smsHash = hash,
+                    sender = transaction.sender,
+                    body = transaction.rawMessage,
+                    smsTimestamp = transaction.timestamp,
+                    amount = transaction.effectiveAmount,
+                    transactionType = transaction.effectiveType.name,
+                    vendor = transaction.vendor,
+                    description = transaction.description,
+                    categoryName = transaction.categoryName,
+                    sourceAccountId = transaction.sourceAccountId,
+                    sourceAccountName = transaction.sourceAccountName,
+                    destinationAccountId = transaction.destinationAccountId,
+                    destinationAccountName = transaction.destinationAccountName,
+                    selectedTagsCommaSeparated = transaction.selectedTags.joinToString(","),
+                    syncStatus = "PENDING"
                 )
-            } catch (e: Exception) {
-                Log.e(TAG, "Error saving pending record", e)
-            } finally {
-                pendingResult.finish()
-            }
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving pending record", e)
         }
     }
 

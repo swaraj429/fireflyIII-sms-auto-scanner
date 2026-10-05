@@ -45,6 +45,12 @@ object RuleEngine {
                 transaction.categoryName = rule.categoryName
             }
 
+            // Budget — first match wins
+            if (transaction.budgetId == null && rule.budgetId != null) {
+                transaction.budgetId = rule.budgetId
+                transaction.budgetName = rule.budgetName.ifBlank { null }
+            }
+
             // Destination account — first match wins
             if (transaction.destinationAccountId == null && rule.destinationAccountId != null) {
                 transaction.destinationAccountId = rule.destinationAccountId
@@ -117,6 +123,10 @@ object RuleEngine {
             ?: transaction.categoryName?.ifBlank { null }
             ?: ""
 
+        val budgetVal = rule?.budgetName?.ifBlank { null }
+            ?: transaction.budgetName?.ifBlank { null }
+            ?: ""
+
         val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
         val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
         val dateVal = dateFormat.format(Date(transaction.timestamp))
@@ -133,6 +143,7 @@ object RuleEngine {
             "(?i)\\{ammout\\}" to amountVal, // forgiving alias for user typo
             "(?i)\\{account\\}" to accountVal,
             "(?i)\\{category\\}" to categoryVal,
+            "(?i)\\{budget\\}" to budgetVal,
             "(?i)\\{date\\}" to dateVal,
             "(?i)\\{time\\}" to timeVal,
             "(?i)\\{type\\}" to typeVal,

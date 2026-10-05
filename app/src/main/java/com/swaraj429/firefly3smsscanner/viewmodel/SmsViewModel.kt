@@ -85,10 +85,9 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
         val matcher = AccountMatcher()
 
         results.forEach { txn ->
-            RuleEngine.applyRules(txn, rules)
+            // [1] Account matching first — detect source/destination from SMS content
             val match = matcher.findBestMatch(txn.rawMessage, accounts)
             if (match != null) {
-                // Determine source or destination based on transaction type
                 if (txn.effectiveType == TransactionType.WITHDRAWAL) {
                     txn.sourceAccountId = match.account.id
                     txn.sourceAccountName = match.account.name
@@ -97,6 +96,8 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
                     txn.destinationAccountName = match.account.name
                 }
             }
+            // [2] Rules run last — can override account, category, tags, description
+            RuleEngine.applyRules(txn, rules)
         }
 
         parsedTransactions.clear()

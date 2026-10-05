@@ -10,6 +10,8 @@ data class ParsingRule(
     val categoryName: String = "",
     val destinationAccountId: String? = null,
     val destinationAccountName: String = "",
+    val budgetId: String? = null,
+    val budgetName: String = "",
     val tags: List<String> = emptyList(),
     val isEnabled: Boolean = true,
     val descriptionTemplate: String = "",
