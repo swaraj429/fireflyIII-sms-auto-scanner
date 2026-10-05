@@ -30,7 +30,12 @@ object DebugLog {
     // Observable list for Compose UI — only mutated on main thread
     val entries = mutableStateListOf<Entry>()
 
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private val mainHandler: Handler? = try {
+        val looper = Looper.getMainLooper()
+        if (looper != null) Handler(looper) else null
+    } catch (_: Throwable) {
+        null
+    }
 
     private fun threadSafeDateFormat(): SimpleDateFormat =
         SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
@@ -39,7 +44,9 @@ object DebugLog {
         val timestamp = threadSafeDateFormat().format(Date())
         val entry = Entry(timestamp, tag, message)
 
-        Log.d("FF_$tag", message) // Always log to Logcat too
+        try {
+            Log.d("FF_$tag", message) // Always log to Logcat too
+        } catch (_: Throwable) {}
 
         _entries.add(0, entry) // newest first
         while (_entries.size > MAX_ENTRIES) {
@@ -48,24 +55,39 @@ object DebugLog {
 
         // Sync to Compose state on the main thread
         postToMain {
-            entries.clear()
-            entries.addAll(_entries)
+            try {
+                entries.clear()
+                entries.addAll(_entries)
+            } catch (_: Throwable) {}
         }
     }
 
     fun clear() {
         _entries.clear()
         postToMain {
-            entries.clear()
+            try {
+                entries.clear()
+            } catch (_: Throwable) {}
         }
-        Log.d(TAG, "Debug log cleared")
+        try {
+            Log.d(TAG, "Debug log cleared")
+        } catch (_: Throwable) {}
     }
 
     private fun postToMain(block: () -> Unit) {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            block()
-        } else {
-            mainHandler.post(block)
+        val handler = mainHandler
+        if (handler == null) {
+            try { block() } catch (_: Throwable) {}
+            return
+        }
+        try {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                block()
+            } else {
+                handler.post(block)
+            }
+        } catch (_: Throwable) {
+            try { block() } catch (_: Throwable) {}
         }
     }
 }

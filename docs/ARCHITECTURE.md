@@ -26,10 +26,11 @@ flowchart TB
 
     subgraph UI["Presentation Layer (Jetpack Compose)"]
         HOME["HomeScreen (Dashboard, Filter Chips, Sync Badge, FAB)"]
-        RULES["RulesScreen (Categorization & Matching Rules)"]
+        RULES["RulesScreen (Smart Rules & Detected Vendors Directory)"]
         SETTINGS["SettingsScreen (Credentials, Accounts, Manual Sync, Logs)"]
         SHEET_EDIT["TransactionEditorSheet (Modal Bottom Sheet)"]
         SHEET_DISMISS["DismissReasonSheet (Modal Bottom Sheet)"]
+        SHEET_RULE["RuleEditorSheet (Modal Bottom Sheet)"]
     end
 
     subgraph VM["ViewModel Layer (Activity Scoped)"]
@@ -37,8 +38,9 @@ flowchart TB
         VM_TX["TransactionViewModel (Submit POST & Update PUT)"]
         VM_HIST["SmsHistoryViewModel (Room History & Retention)"]
         VM_SYNC["SyncViewModel (Sync Triggers & Status)"]
-        VM_DATA["FireflyDataViewModel (Cached Accounts, Categories)"]
+        VM_DATA["FireflyDataViewModel (Cached Accounts, Categories, Budgets)"]
         VM_RULES["RulesViewModel (Custom Parsing Rules)"]
+        VM_VENDORS["VendorsViewModel (Detected Merchants & 1-Tap Rules)"]
         VM_SETUP["SetupViewModel (Connection Diagnostics)"]
     end
 
@@ -175,7 +177,7 @@ The custom `Application` subclass is registered in `AndroidManifest.xml` via `an
 
 ## Screen Navigation
 
-The app uses **Navigation Compose** with a single bottom navigation bar. Starting in Alpha 4, the navigation consists of 3 primary tabs: **Home**, **Rules**, and **Settings**. SMS scanning is unified directly into the Home screen.
+The app uses **Navigation Compose** with a single bottom navigation bar. Starting in **v0.1.0-beta**, the navigation consists of 3 primary tabs: **Home**, **Rules** (featuring Smart Rules and Detected Vendors), and **Settings**. SMS scanning is unified directly into the Home screen.
 
 ```mermaid
 stateDiagram-v2
@@ -223,11 +225,12 @@ stateDiagram-v2
     }
 
     state RulesScreen {
-        [*] --> RuleList
-        RuleList --> CreateRule: Tap "Add Rule"
-        RuleList --> EditRule: Tap Existing Rule
-        CreateRule --> RuleList: Save Pattern & Account
-        EditRule --> RuleList: Update / Delete
+        [*] --> TabSelection
+        TabSelection --> RulesTab: Tab 1: Smart Rules
+        TabSelection --> VendorsTab: Tab 2: Detected Vendors
+        RulesTab --> RuleEditorSheet: Tap "Add Rule" or Existing Rule
+        VendorsTab --> RuleEditorSheet: Tap "Create Rule" on Vendor Card
+        RuleEditorSheet --> RulesTab: Save Trigger, Template, Budget, Account, Tags
     }
 
     state SettingsScreen {
@@ -275,14 +278,16 @@ flowchart TD
         VM_Sync["SyncViewModel\n(Reconciliation orchestrator, progress state)"]
         VM_Data["FireflyDataViewModel\n(Cached accounts, categories, tags, budgets)"]
         VM_Rules["RulesViewModel\n(User rule definitions & priority ordering)"]
+        VM_Vendors["VendorsViewModel\n(Detected merchants directory & rule mapping)"]
     end
 
     subgraph Composables["Composable Presentation Destinations"]
         Screen_Home["HomeScreen\n(Consolidates SMS Inbox, Room History, Date Chips)"]
-        Screen_Rules["RulesScreen\n(Custom parsing rules)"]
+        Screen_Rules["RulesScreen\n(Smart Rules & Detected Vendors)"]
         Screen_Settings["SettingsScreen\n(API config, accounts, manual sync, logs)"]
         Sheet_TxEditor["TransactionEditorSheet\n(Modal bottom sheet)"]
         Sheet_Dismiss["DismissReasonSheet\n(Modal bottom sheet)"]
+        Sheet_RuleEditor["RuleEditorSheet\n(Modal bottom sheet)"]
     end
 
     subgraph Scope_Global["Application / Global Scope (Singletons)"]
@@ -305,6 +310,9 @@ flowchart TD
     VM_History -.->|"Dismiss / Categorize"| Sheet_Dismiss
 
     VM_Rules -.->|"Manage Rules"| Screen_Rules
+    VM_Vendors -.->|"Detected Vendors"| Screen_Rules
+    VM_Rules -.->|"Rule State"| Sheet_RuleEditor
+    VM_Data -.->|"Categories, Accounts, Budgets"| Sheet_RuleEditor
 
     VM_Setup -.->|"Credentials & Test"| Screen_Settings
     VM_Sync -.->|"Trigger Sync"| Screen_Settings

@@ -110,6 +110,33 @@ UI updates with latest synced state
 
 ---
 
+## Flow 8: Rules, Detected Vendors & Rule Editor Sheet
+
+```
+Detected Vendors Tab / Smart Rules Tab
+          │
+          ├── User taps "Create Rule" on Vendor Card (prefills keyword & template)
+          │   OR user taps "Add Rule" / Existing Rule
+          ▼
+RuleEditorSheet (Modal Bottom Sheet)
+          │
+          ├── User edits Keyword (IF condition)
+          ├── User edits Description Template + taps variable chips ({vendor}, {amount}, {budget}...)
+          │   └── Live Preview card interpolates in real time via RuleEngine.interpolateTemplate()
+          ├── User configures Auto-Send switch, Category, Budget, Destination Account, and Tags
+          ▼
+User taps "Save Changes" / "Create Rule"
+          │
+          ├── rulesViewModel.addRule() / updateRule() (saves to SharedPreferences JSON)
+          └── vendorsViewModel.loadVendors(rules) (re-indexes vendor mapping status)
+          ▼
+RuleEngine applies updated rules in real time:
+   1. Live SMS arrival (SmsReceiver): SmsParser -> Payee -> AccountMatcher -> RuleEngine (LAST)
+   2. Batch SMS Scan (SmsViewModel): SmsParser -> Payee -> AccountMatcher -> RuleEngine (LAST)
+```
+
+---
+
 ## State Ownership Map
 
 | State | Owner | How UI reads it |
@@ -124,5 +151,6 @@ UI updates with latest synced state
 | `hasSynced`, `isLoading`, `lastSyncStatus` | `FireflyDataViewModel` | `mutableStateOf` |
 | `historyRecords`, `syncSummary`, `isSyncing` | `SmsHistoryViewModel` | `StateFlow` / `collectAsStateWithLifecycle()` |
 | `rules` | `RulesViewModel` | `StateFlow` / `collectAsState()` |
+| `vendors` | `VendorsViewModel` | `StateFlow` / `collectAsState()` |
 | `entries`, `lastRequest`, `lastResponse` | `DebugLog` (singleton) | `mutableStateListOf` / `mutableStateOf` |
 | `pendingNotificationTransaction` | `MainActivity` | `mutableStateOf` (passed to `MainApp`) |

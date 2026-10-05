@@ -84,32 +84,35 @@ object DescriptionExtractor {
     )
 
     // Precompiled regexes
-    private val axisMultilineRegex1 = Regex("""Spent\s*(?:INR|Rs\.?)\s*[\d,.]+\s*\n[^\n]+\n\d{2}-\d{2}-\d{2,4}\s+[\d:]+(?:\s*IST)?\s*\n([^\n]+)\nAvl""", RegexOption.IGNORE_CASE)
-    private val axisMultilineRegex2 = Regex("""Spent\s*\n[^\n]+\n[^\n]+\n\d{2}-\d{2}-\d{2,4}\s+[\d:]+\s*\n([^\n]+)\nAvl""", RegexOption.IGNORE_CASE)
+    private val axisMultilineRegex1 = Regex("""(?:Spent\s*(?:INR|Rs\.?)\s*[\d,.]+|[^\n]*\bspent\b)\s*\n[^\n]+\n(?:at\s+)?\d{2}-\d{2}-\d{2,4}\s+[\d:]+(?:\s*IST)?\s*\n([^\n]+)\nAvl""", RegexOption.IGNORE_CASE)
+    private val axisMultilineRegex2 = Regex("""(?:Spent|[^\n]*\bspent\b)\s*\n[^\n]+\n[^\n]+\n(?:at\s+)?\d{2}-\d{2}-\d{2,4}\s+[\d:]+\s*\n([^\n]+)\nAvl""", RegexOption.IGNORE_CASE)
 
     private val ccPaymentRegex1 = Regex("""payment\s+(?:of\s+.*?\s+)?(?:has\s+been\s+)?received\s+towards\s+(?:your\s+)?([A-Za-z0-9 ]+?\s+Card(?:\s+[X\d]+)?)""", RegexOption.IGNORE_CASE)
     private val ccPaymentRegex2 = Regex("""received\s+(?:the\s+)?payment\s+via\s+.*?\s+your\s+available\s+Credit\s+Limit""", RegexOption.IGNORE_CASE)
 
     private val cardSpendRegex1 = Regex("""spent\s+(?:using|on)\s+.*?\s+(?:Card|card)\s+.*?\s+on\s+\d{1,2}-[A-Za-z]{3}-\d{2,4}\s+(?:on|at)\s+([A-Za-z0-9 .\-_*&@]+?)(?:\.\s*Avl|\.\s*If|\.${'$'}|${'$'})""", RegexOption.IGNORE_CASE)
-    private val cardSpendRegex2 = Regex("""spent\s+on\s+.*?\s+(?:Card|card)\s+.*?\s+(?:at|on)\s+([A-Za-z0-9 .\-_*&@]+?)(?:\.\s*Avl|\.\s*If|\.${'$'}|${'$'})""", RegexOption.IGNORE_CASE)
-    private val sbiCardSpendRegex = Regex("""spent\s+on\s+your\s+SBI\s+Credit\s+Card\s+ending\s+\d+\s+at\s+([A-Za-z0-9 .\-_*&@]+?)\s+on\s+\d""", RegexOption.IGNORE_CASE)
+    private val cardSpendRegex2 = Regex("""spent\s+on\s+.*?\s+(?:Card|card)\s+.*?\s+(?:at|on)\s+([A-Za-z0-9 .\-_*&@]+?)(?:\s+on\s+\d{1,2}[-/][A-Za-z0-9]+|\.\s*Avl|\.\s*If|\.${'$'}|${'$'})""", RegexOption.IGNORE_CASE)
+    private val sbiCardSpendRegex = Regex("""spent\s+on\s+your\s+SBI\s+(?:Credit\s+)?Card\s+ending\s+\d+\s+at\s+([A-Za-z0-9 .\-_*&@]+?)\s+on\s+\d""", RegexOption.IGNORE_CASE)
     private val emiCardSpendRegex = Regex("""EMI\s+card\s+ending\s+\d+\s+at\s+([A-Za-z0-9 .\-_*&@]+?)\s+for\s+a\s+loan""", RegexOption.IGNORE_CASE)
     private val rblCardSpendRegex = Regex("""by\s+use\s+of\s+Card\s+.*?\s+at\s+([A-Za-z0-9 .\-_*&@]+?)(?:\s+\d{3}-\d{3}-\d{4}|\.\s*For|\.${'$'}|${'$'})""", RegexOption.IGNORE_CASE)
 
     private val debitedPayeeRegex = Regex("""debited\s+(?:for|with)\s+(?:Rs\.?|INR)\s*[\d,.]+\s+(?:on\s+[^;]+)?[;&]\s*([A-Za-z0-9 .\-_&@]+?)\s+credited""", RegexOption.IGNORE_CASE)
-    private val creditedPayerRegex = Regex("""credited\s+with\s+(?:Rs\.?|INR)\s*[\d,.]+\s+(?:on\s+.*?\s+)?from\s+([A-Za-z0-9 .\-_&@]+?)(?:\.\s*UPI|\.\s*-|\.${'$'}|${'$'})""", RegexOption.IGNORE_CASE)
+    private val creditedPayerRegex = Regex("""credited\s+with\s+(?:Rs\.?|INR)\s*[\d,.]+\s+(?:on\s+.*?\s+)?(?:from|by\s+account\s+linked\s+to\s+UPI\s+id)\s+([A-Za-z0-9 .\-_&@]+?)(?:\s*\(|\.\s*UPI|\.\s*-|\.${'$'}|${'$'})""", RegexOption.IGNORE_CASE)
     private val neftInfoRegex = Regex("""Info\s+(?:NEFT|IMPS|RTGS|UPI)-[A-Za-z0-9]+-([A-Za-z0-9 .]+?)(?:\.|\s+Available|${'$'})""", RegexOption.IGNORE_CASE)
     private val infoBilRegex = Regex("""InfoBIL\*([A-Za-z0-9 .]+?)(?:\.|\s+Avl|${'$'})""", RegexOption.IGNORE_CASE)
+    private val infoMerchantRegex = Regex("""Info:\s*([A-Za-z0-9 .\-_*]+?)(?:\.|\s+Available|\s+Avl|${'$'})""", RegexOption.IGNORE_CASE)
 
     private val simplChargedRegex = Regex("""(?:Rs\.?|INR)\s*[\d,.]+\s+on\s+([A-Za-z0-9 .\-_&]+?)\s+charged\s+via\s+Simpl""", RegexOption.IGNORE_CASE)
-    private val tollPaidRegex = Regex("""toll\s+paid\s+from\s+.*?at\s+([A-Za-z0-9 .\-_]+?)(?:\s+on\s+\d|\.${'$'}|${'$'})""", RegexOption.IGNORE_CASE)
+    private val simplPurchaseRegex = Regex("""purchase\s+of\s+(?:Rs\.?|INR)\s*[\d,.]+\s+at\s+([A-Za-z0-9 .\-_&]+?)\s+using\s+Simpl""", RegexOption.IGNORE_CASE)
+    private val tollPaidRegex = Regex("""(?:toll\s+paid\s+from|toll\s+of\s+(?:Rs\.?|INR)\s*[\d,.]+\s+deducted\s+from)\s+.*?at\s+([A-Za-z0-9 .\-_]+?)(?:\s+on\s+\d|\.${'$'}|${'$'})""", RegexOption.IGNORE_CASE)
     private val paytmPaidRegex1 = Regex("""Paid\s+(?:Rs\.?|INR)\s*[\d,.]+\s+to\s+([A-Za-z0-9 .\-_&]+?)(?:\s+at\s+[A-Za-z]{3}|\s+at\s+\d|\s*\.\s*Order)""", RegexOption.IGNORE_CASE)
     private val paytmTransferredRegex = Regex("""transferred\s+to\s+([A-Za-z0-9 .\-_&]+?)(?:\([0-9]+\))?\s+at\s+""", RegexOption.IGNORE_CASE)
     private val debitedTowardsRegex = Regex("""debited\s+towards\s+([A-Za-z0-9 .\-_&]+?)(?:\s+for\s+(?:Rs\.?|INR)|\.|\,|${'$'})""", RegexOption.IGNORE_CASE)
-    private val paidToRegex = Regex("""(?:paid|sent)\s+(?:Rs\.?|INR|₹)?\s*[\d,.]+\s+to\s+([A-Za-z0-9 .\-_&@]+?)(?:\s+from|\s+on|\s+ref|\s+using|\.|\,|${'$'})""", RegexOption.IGNORE_CASE)
+    private val paidToRegex = Regex("""(?:(?:paid|sent)\s+(?:Rs\.?|INR|₹)?\s*[\d,.]+\s+to|(?:Rs\.?|INR|₹)?\s*[\d,.]+\s+(?:paid|sent)\s+to)\s+([A-Za-z0-9 .\-_&@]+?)(?:\s+from|\s+on|\s+ref|\s+using|\.|\,|${'$'})""", RegexOption.IGNORE_CASE)
     private val sentToRegex = Regex("""sent\s+to\s+([A-Za-z0-9 .\-_&@]+?)(?:\s+from|\s+on|\s+ref|\s+using|\.|\,|${'$'})""", RegexOption.IGNORE_CASE)
     private val vpaCreditedRegex = Regex("""(?:credited\s+to|sent\s+to)\s+(?:VPA\s+)?([a-zA-Z0-9.\-_]+@[a-zA-Z0-9]+)""", RegexOption.IGNORE_CASE)
 
+    private val sipDebitRegex = Regex("""debited\s+from\s+.*?for\s+SIP\s+(?:Investment\s+)?([A-Za-z0-9 .\-_&]+?)(?:\.|\,|${'$'})""", RegexOption.IGNORE_CASE)
     private val transferToAccRegex = Regex("""credited\s+to\s+a/c\s*(?:no\.?)?\s*([X\d]+)""", RegexOption.IGNORE_CASE)
     private val transferFromAccRegex = Regex("""debited\s+from\s+a/c\s*(?:no\.?)?\s*([X\d]+)""", RegexOption.IGNORE_CASE)
     private val iciciTransferAccRegex = Regex("""(?:&|\.)\s*(?:Acct|A/c)\s*([X\d]+)\s+credited""", RegexOption.IGNORE_CASE)
@@ -130,8 +133,12 @@ object DescriptionExtractor {
         if (ccMatch != null && ccMatch.groupValues.size > 1) {
             return cleanDescription("${ccMatch.groupValues[1].trim()} Payment")
         }
-        if (ccPaymentRegex2.containsMatchIn(body)) {
-            val cardName = if (sender.contains("SBI", ignoreCase = true)) "SBI Card" else "Credit Card"
+        if (ccPaymentRegex2.containsMatchIn(body) ||
+            body.contains("towards your SBI Card", ignoreCase = true) ||
+            body.contains("towards your credit card", ignoreCase = true) ||
+            body.contains("towards your Card", ignoreCase = true)
+        ) {
+            val cardName = if (sender.contains("SBI", ignoreCase = true) || body.contains("SBI Card", ignoreCase = true)) "SBI Card" else "Credit Card"
             return "$cardName Bill Payment"
         }
         if (lower.contains("repayment was a success") || lower.contains("received for simpl pay later")) {
@@ -158,7 +165,14 @@ object DescriptionExtractor {
             return "${cleanMerchantName(emiCardMatch.groupValues[1])} (EMI Card)"
         }
 
-        // 4. Account debit with payee (ICICI, SBI, RBL)
+        // 4. Info field on Credit Card spends (e.g. ICICI)
+        val infoMerchantMatch = infoMerchantRegex.find(body)
+        if (infoMerchantMatch != null && infoMerchantMatch.groupValues.size > 1) {
+            val merchant = infoMerchantMatch.groupValues[1].trim()
+            if (merchant.isNotBlank()) return cleanMerchantName(merchant)
+        }
+
+        // 5. Account debit with payee (ICICI, SBI, RBL)
         val debitedMatch = debitedPayeeRegex.find(body)
         if (debitedMatch != null && debitedMatch.groupValues.size > 1) {
             val cand = debitedMatch.groupValues[1].trim()
@@ -167,13 +181,13 @@ object DescriptionExtractor {
             }
         }
 
-        // 5. Account credit from payer
+        // 6. Account credit from payer
         val creditedMatch = creditedPayerRegex.find(body)
         if (creditedMatch != null && creditedMatch.groupValues.size > 1) {
             return cleanMerchantName(creditedMatch.groupValues[1])
         }
 
-        // 6. Corporate NEFT / IMPS Salary / Info
+        // 7. Corporate NEFT / IMPS Salary / Info
         val neftMatch = neftInfoRegex.find(body)
         if (neftMatch != null && neftMatch.groupValues.size > 1) {
             return cleanMerchantName(neftMatch.groupValues[1])
@@ -183,13 +197,13 @@ object DescriptionExtractor {
             return cleanDescription(infoBilMatch.groupValues[1])
         }
 
-        // 7. Simpl PayLater
-        val simplMatch = simplChargedRegex.find(body)
+        // 8. Simpl PayLater
+        val simplMatch = simplChargedRegex.find(body) ?: simplPurchaseRegex.find(body)
         if (simplMatch != null && simplMatch.groupValues.size > 1) {
             return cleanMerchantName(simplMatch.groupValues[1])
         }
 
-        // 8. FASTag Tolls
+        // 9. FASTag Tolls
         val tollMatch = tollPaidRegex.find(body)
         if (tollMatch != null && tollMatch.groupValues.size > 1) {
             var plaza = tollMatch.groupValues[1].trim()
@@ -199,28 +213,37 @@ object DescriptionExtractor {
             return toTitleCase(plaza)
         }
 
-        // 9. Paytm & general payments
+        // 10. Paytm & general payments
         val paytmMatch = paytmPaidRegex1.find(body) ?: paytmTransferredRegex.find(body) ?: paidToRegex.find(body) ?: sentToRegex.find(body)
         if (paytmMatch != null && paytmMatch.groupValues.size > 1) {
             val cand = paytmMatch.groupValues[1].trim()
             if (!cand.startsWith("acct", ignoreCase = true) && !cand.startsWith("a/c", ignoreCase = true)) {
+                if (cand.contains("@")) {
+                    return cleanVpa(cand)
+                }
                 return cleanMerchantName(cand)
             }
         }
 
-        // 10. debited towards
+        // 11. debited towards
         val towardsMatch = debitedTowardsRegex.find(body)
         if (towardsMatch != null && towardsMatch.groupValues.size > 1) {
             return cleanMerchantName(towardsMatch.groupValues[1])
         }
 
-        // 11. UPI VPA
+        // 12. UPI VPA
         val vpaMatch = vpaCreditedRegex.find(body)
         if (vpaMatch != null && vpaMatch.groupValues.size > 1) {
             return cleanVpa(vpaMatch.groupValues[1].trim())
         }
 
-        // 12. Inter-account transfer
+        // 13. SIP systematic debits
+        val sipMatch = sipDebitRegex.find(body)
+        if (sipMatch != null && sipMatch.groupValues.size > 1) {
+            return "SIP - ${cleanMerchantName(sipMatch.groupValues[1])}"
+        }
+
+        // 14. Inter-account transfer
         val iciciTransfer = iciciTransferAccRegex.find(body)
         if (iciciTransfer != null && iciciTransfer.groupValues.size > 1) {
             return "Transfer to A/c ${iciciTransfer.groupValues[1].trim()}"
@@ -234,7 +257,7 @@ object DescriptionExtractor {
             return "Transfer from A/c ${transferFrom.groupValues[1].trim()}"
         }
 
-        // 13. POS & ATM operations
+        // 15. POS & ATM operations
         if (lower.contains("at atm") || lower.contains("withdrawn from atm")) {
             return "ATM Cash Withdrawal"
         }
@@ -257,7 +280,7 @@ object DescriptionExtractor {
             }
         }
 
-        // 14. UPI Lite Wallet
+        // 16. UPI Lite Wallet
         val liteMatch = upiLiteRegex.find(body)
         if (liteMatch != null && liteMatch.groupValues.size > 1) {
             return "UPI Lite Wallet (${liteMatch.groupValues[1]} txns)"
@@ -266,12 +289,12 @@ object DescriptionExtractor {
             return "UPI Lite Wallet"
         }
 
-        // 15. Reversals / Refunds
+        // 17. Reversals / Refunds
         if (lower.contains("reversal of transaction") || lower.contains("reversed back") || lower.contains("refund")) {
             return "Transaction Reversal / Refund"
         }
 
-        // 16. Telecom recharges
+        // 18. Telecom recharges
         val telecomMatch = telecomRechargeRegex.find(body)
         if (telecomMatch != null && telecomMatch.groupValues.size > 1) {
             return "Recharge: ${telecomMatch.groupValues[1].trim()}"
@@ -283,10 +306,16 @@ object DescriptionExtractor {
             return "Jio Bill / Recharge"
         }
 
-        // 17. Contextual Fallback (Bank Name + Account)
+        // 19. Contextual Fallback (Bank Name + Account)
         val bankName = resolveBankName(sender)
         val accMatch = accountNumRegex.find(body)
-        val accStr = accMatch?.groupValues?.getOrNull(1)?.trim() ?: ""
+        var accStr = accMatch?.groupValues?.getOrNull(1)?.trim() ?: ""
+        if (accStr.isNotBlank()) {
+            accStr = accStr.replace(Regex("""^[xX*.]+"""), "...")
+            if (!accStr.startsWith("...")) {
+                accStr = "...$accStr"
+            }
+        }
 
         val action = if (isExpense) "Debit" else "Deposit"
         return if (accStr.isNotBlank()) {
@@ -339,7 +368,14 @@ object DescriptionExtractor {
         if (paidMatch != null && paidMatch.groupValues.size > 1) {
             val cand = paidMatch.groupValues[1].trim()
             if (cand.isNotBlank() && !cand.startsWith("acct", ignoreCase = true) && !cand.startsWith("a/c", ignoreCase = true)) {
-                return cleanMerchantName(cand)
+                if (cand.contains("@")) {
+                    val vpaDesc = cleanVpa(cand)
+                    if (vpaDesc.isNotBlank() && !vpaDesc.startsWith("UPI ") && !vpaDesc.contains("@")) {
+                        return vpaDesc
+                    }
+                } else {
+                    return cleanMerchantName(cand)
+                }
             }
         }
 
@@ -362,7 +398,7 @@ object DescriptionExtractor {
         }
 
         // 6. Simpl
-        val simplMatch = simplChargedRegex.find(body)
+        val simplMatch = simplChargedRegex.find(body) ?: simplPurchaseRegex.find(body)
         if (simplMatch != null && simplMatch.groupValues.size > 1) {
             return cleanMerchantName(simplMatch.groupValues[1])
         }
@@ -441,6 +477,12 @@ object DescriptionExtractor {
         }
         val cleaned = username.replace(Regex("""[\d._-]+${'$'}"""), "")
         if (cleaned.length >= 3) {
+            val nameWithInitial = Regex("""^([a-zA-Z]{3,})([a-zA-Z])$""").find(cleaned)
+            if (nameWithInitial != null) {
+                val first = nameWithInitial.groupValues[1]
+                val last = nameWithInitial.groupValues[2]
+                return toTitleCase("$first $last")
+            }
             return toTitleCase(cleaned.replace(".", " ").replace("_", " "))
         }
         return vpa
@@ -450,8 +492,8 @@ object DescriptionExtractor {
         var clean = raw.trim()
         // Strip common bank prefixes: "IND*", "WWW ", "M/s ", "Mr ", "Miss "
         clean = clean.replace(Regex("""^(IND\*|WWW\s+|M/s\s+|Mr\s+|Miss\s+|Dr\s+)""", RegexOption.IGNORE_CASE), "")
-        // Strip common suffixes: " - ICICI Bank", " Avl", " If not", etc.
-        clean = clean.replace(Regex("""(?:\s*-\s*[A-Za-z]+ Bank|\.\s*Avl.*|\.\s*If not.*)${'$'}""", RegexOption.IGNORE_CASE), "")
+        // Strip common suffixes: " - ICICI Bank", " Avl", " If not", trailing date, etc.
+        clean = clean.replace(Regex("""(?:\s*-\s*[A-Za-z]+ Bank|\.\s*Avl.*|\.\s*If not.*|\s+on\s+\d{1,2}[-/][A-Za-z0-9]+.*)${'$'}""", RegexOption.IGNORE_CASE), "")
         clean = clean.trim()
         return cleanDescription(toTitleCase(clean))
     }

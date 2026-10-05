@@ -4,6 +4,7 @@
 
 **Automatically detect transaction SMS messages and log them to your [Firefly III](https://www.firefly-iii.org/) instance — with one tap.**
 
+[![Release](https://img.shields.io/badge/Release-v0.1.0--beta-blue?logo=android)](https://github.com/swaraj429/firefly-3-sms-auto-scanner/releases/tag/v0.1.0-beta)
 [![Android](https://img.shields.io/badge/Platform-Android%208.0%2B-brightgreen?logo=android)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Language-Kotlin-7F52FF?logo=kotlin)](https://kotlinlang.org)
 [![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
@@ -12,6 +13,9 @@
 [![Website](https://img.shields.io/badge/Website-Live-brightgreen?logo=googlechrome)](https://firefly3smsscanner.swaraj429.com/)
 
 *Stop manually logging every UPI payment, card swipe, and bank transfer.*
+
+> **🚀 Public Beta is Live (`v0.1.0-beta`)!**  
+> The app is ready for public use. We are actively maintaining it and providing dedicated support for bug fixes and feature requests. Found a bug or have a suggestion? Let us know in [GitHub Issues](https://github.com/swaraj429/firefly-3-sms-auto-scanner/issues)!
 
 </div>
 
@@ -52,10 +56,13 @@
 - Dismissal reasons tracked with timestamps (`Duplicate Alert`, `Credit Card Bill`, `Promotional/Other`, `Manual Ignore`)
 - Instant Undo via Snackbar and filter toggle to inspect or restore dismissed transactions
 
-### 🧠 Smart Rule-Based Auto-Categorization
-- Create customizable IF/THEN automation rules based on sender, message regex, or amount
-- Automatically assign categories, budgets, accounts, tags, or mark transactions to be ignored
-- Manage rules in the dedicated **Rules** tab
+### 🧠 Smart Rules, Merchant Automation & Detected Vendors
+- **Modern Rule Editor Bottom Sheet**: Intuitive IF/THEN rule builder with keyword matching, description templates with variable chips (`{vendor}`, `{amount}`, `{account}`, `{category}`, `{budget}`, `{date}`, etc.), and dynamic live preview.
+- **Budget Selection**: Automatically assign transactions to a Firefly III budget via rules.
+- **Detected Vendors Directory**: Dedicated directory of unique merchants detected from SMS with one-tap rule creation.
+- **Reliable Account Detection**: In live mode, source accounts are matched against cached Room accounts before rules run, guaranteeing rules always evaluate last.
+- **Auto-Send Directives**: Configure specific rules to post to Firefly III immediately without asking for manual confirmation.
+- Manage rules and vendors in the dedicated **Rules** tab.
 
 ### 🏦 Abacus-Style Transaction Editor
 Before submitting, enrich each transaction with:
@@ -98,8 +105,10 @@ cd firefly-3-sms-auto-scanner
 # 3. Build & run on your device (USB debugging or wireless ADB)
 ```
 
-#### Option B — Release APK *(coming soon)*
-> A signed release APK will be published on the GitHub Releases page once the project reaches v1.0.
+#### Option B — Download Public Beta APK (Recommended)
+You can download the pre-compiled signed APK directly from the **[GitHub Releases](https://github.com/swaraj429/firefly-3-sms-auto-scanner/releases/tag/v0.1.0-beta)** page and install it directly on your Android phone.
+
+> 💡 **Public Beta Notice:** The app is ready for daily use. If you encounter any bugs, bank SMS parsing issues, or have feature ideas, please open an issue or start a discussion on GitHub!
 
 ### First Run
 
@@ -180,11 +189,12 @@ Contributions are what make open source great. Whether it's fixing a bug, adding
 - [x] **v0.0.3-alpha** — Persistent SMS history (Room DB), hash-based deduplication, in-app Database Viewer, and fixed Account Auto-matching
 - [x] **v0.0.4-alpha** — Dismissal & restore workflows, advanced rule builder UI
 - [x] **v0.0.5-alpha** — Bi-directional Firefly III sync, updating sent transactions, and UI uncluttering
-- [ ] **v1.0** — Stable release + signed APK
-- [ ] Auto-send mode (skip review, send all transactions instantly)
-- [ ] Support for multiple Firefly III accounts
-- [ ] Widget showing today's spend
-- [ ] Import from CSV/bank statement
+- [x] **v0.1.0-beta** — 🚀 **Public Beta Release**: Modern Bottom Sheet Rule Editor, Detected Vendors directory, Budget assignment in rules, Live SMS Room account matching fixes, template live preview, and active community support readiness
+- [ ] **v1.0** — General Availability stable release
+- [ ] Auto-send mode toggle for all transactions
+- [ ] Support for multiple Firefly III instances/accounts
+- [ ] Homescreen widget showing today's spend
+- [ ] Import from CSV / bank statement
 - [ ] Support non-Indian SMS formats (EU, US bank patterns)
 
 ---

@@ -26,7 +26,7 @@ The receiver handles **three distinct actions**:
 
 ---
 
-## Live SMS Detection Flow
+## Live SMS Detection Flow (v0.1.0-beta)
 
 ```
 📩 SMS arrives on device
@@ -38,27 +38,49 @@ Android dispatches SMS_RECEIVED broadcast
 SmsReceiver.onReceive()
          │
          ▼
-getMessagesFromIntent(intent) → Array<SmsMessage>
+Telephony.Sms.Intents.getMessagesFromIntent(intent)
          │
          ├─ null or empty? ────────────────────► return (no-op)
          │
-         └─ For each SmsMessage:
+         ▼
+val pendingResult = goAsync()
+CoroutineScope(Dispatchers.IO).launch {
+         │
+         ├─ 1. Load cached asset accounts from Room DB (FireflyDatabase.getAccountsByType)
+         ├─ 2. Load automation rules from SharedPreferences (firefly_rules)
+         │
+         └─ For each raw SMS:
                   │
                   ▼
-         Extract sender + body + timestamp
+         SmsParser.parse(sms)
+                  │
+                  ├─ null (not a transaction) ──► log & continue
                   │
                   ▼
-         SmsParser.parse(SmsMessage)
+         AccountMatcher.findBestMatch(body, cachedAccounts)
+                  │ (resolves source/destination account from local Room cache)
+                  ▼
+         RuleEngine.applyRules(transaction, rules)
+                  │ (evaluated LAST: sets custom template, category, budget, tags, autoSend)
+                  ▼
+         Save pending transaction to Room Database (sms_records)
                   │
-                  ├─ null (not a transaction) ──────► log “skipping” → continue loop
+                  ├─ transaction.autoSendToFirefly == true AND AppPrefs.isConfigured:
+                  │        │
+                  │        ▼
+                  │    POST /api/v1/transactions (Auto-send immediately)
+                  │        │
+                  │        ▼
+                  │    Show Result Notification
                   │
-                  └─ ParsedTransaction found
+                  └─ Otherwise:
                            │
                            ▼
-                  NotificationHelper.showTransactionNotification()
+                       NotificationHelper.showTransactionNotification()
                            │
                            ▼
-                  🔔 Notification shown with action buttons
+                       🔔 High-priority interactive notification
+}
 ```
 
 ### Why `getMessagesFromIntent()`?
@@ -69,16 +91,18 @@ A single SMS can arrive in multiple parts (concatenated SMS over 160 characters)
 
 ## The `goAsync()` Pattern
 
-`BroadcastReceiver.onReceive()` runs on the **main thread** and has a hard 10-second timeout enforced by Android. After `onReceive()` returns, any background threads spawned inside it can be killed.
+`BroadcastReceiver.onReceive()` runs on the **main thread** and has a hard 10-second timeout enforced by Android. After `onReceive()` returns, any background threads spawned inside it can be killed if `goAsync()` is not held.
 
-For the "Send Now" action, we need to make a network call (which can take several seconds). The solution:
+In **v0.1.0-beta**, `goAsync()` is utilized in two key flows:
+1. **Live SMS Processing (`SMS_RECEIVED`)**: To query Room Database for cached accounts, match accounts without UI blocking, save to Room, and conditionally execute auto-send.
+2. **Action Send Now (`ACTION_SEND_NOW`)**: To execute background POST network requests to Firefly III.
 
 ```kotlin
 val pendingResult = goAsync()       // 1. Tell Android: "I'm not done yet"
 
 CoroutineScope(Dispatchers.IO).launch {
     try {
-        // ... network call to Firefly III ...
+        // ... Room database queries / Firefly III network calls ...
     } finally {
         pendingResult.finish()       // 2. Tell Android: "Now I'm done"
     }
@@ -87,12 +111,12 @@ CoroutineScope(Dispatchers.IO).launch {
 
 `goAsync()` returns a `PendingResult` object. Android will not consider the broadcast complete until `pendingResult.finish()` is called. This extends the timeout to approximately 60 seconds.
 
-**Step-by-step:**
+**Step-by-step Execution:**
 
 ```
 1. onReceive() called on Main Thread  [10s timeout starts]
          │
-2.       val pendingResult = goAsync()   ← tells Android: "wait, I'm not done"
+2.       val pendingResult = goAsync()   ← tells Android: "wait, I'm doing background I/O"
          │
 3.       CoroutineScope(Dispatchers.IO).launch { ... }
          │
@@ -100,7 +124,7 @@ CoroutineScope(Dispatchers.IO).launch {
          │
          └────── [IO Thread] ─────────────────────────────────────────────►
                                                                           │
-5.                                            POST /api/v1/transactions ←─┘
+5.                                            Room DB Query / Firefly API ←┘
                                                           │
 6.                                            pendingResult.finish() ← broadcast complete ✓
 ```

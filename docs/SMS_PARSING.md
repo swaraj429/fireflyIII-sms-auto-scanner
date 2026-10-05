@@ -278,4 +278,8 @@ Extracted descriptions are resolved via `DescriptionExtractor.extractDescription
 | OTP / marketing spam filter | ✅ **Resolved in Alpha 4** | `isSpamOrNonTransactional` filters out promotional texts, OTPs, and balance alerts |
 | Duplicate detection | ✅ **Resolved in Alpha 4** | Room DB hash-based deduplication + Swipe-to-Dismiss for duplicate alerts |
 | Payee / merchant extraction | ✅ **Resolved in Alpha 4** | 15-tier `DescriptionExtractor` resolves clean merchants and payees |
+| Live SMS Account Matching | ✅ **Resolved in Beta (v0.1.0)** | Room cached accounts queried asynchronously via `goAsync()` in `SmsReceiver` |
+| Pipeline Execution Order | ✅ **Resolved in Beta (v0.1.0)** | Strict pipeline order ensures `RuleEngine` executes **last** after account detection |
+| Automation Rules Budgeting | ✅ **Resolved in Beta (v0.1.0)** | Rules support budget assignment and `{budget}` placeholder in description templates |
+
 

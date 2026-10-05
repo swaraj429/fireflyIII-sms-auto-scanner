@@ -57,7 +57,7 @@
     <div class="container">
       <div class="hero-content">
         <div class="hero-text">
-          <div class="hero-badge"><span class="pulse"></span> Open Source &bull; MIT Licensed</div>
+          <div class="hero-badge"><span class="pulse"></span> 🚀 Public Beta Live &bull; v0.1.0-beta &bull; MIT Licensed</div>
           <h1>Stop Manually Logging Every <span class="gradient-text">Bank Transaction</span></h1>
           <p class="hero-desc">An open-source Android app that detects transaction SMS in real-time and sends them to
             your self-hosted Firefly III — with one tap. No cloud. No tracking. 100% yours.</p>
@@ -135,8 +135,8 @@
         </div>
         <div class="feature-card reveal">
           <div class="feature-icon">🧠</div>
-          <h3>Smart Rule-Based Auto-Categorization</h3>
-          <p>Create IF/THEN rules to automatically categorize transactions based on SMS keywords. Examples: "SWIGGY" → Food & Dining, "UBER" → Transport.</p>
+          <h3>Smart Rules & Vendor Directory</h3>
+          <p>Create powerful IF/THEN automation rules with custom description templates, variable chips ({vendor}, {amount}, {budget}, etc.), live preview, budget assignment, and 1-tap rule generation from detected vendors.</p>
         </div>
         <div class="feature-card reveal">
           <div class="feature-icon">🐛</div>
@@ -176,7 +176,7 @@
         <div class="step-card reveal">
           <div class="step-number">4</div>
           <h3>Start Tracking!</h3>
-          <p>Use the tabbed interface: Home for transactions, SMS for scanning inbox, Rules for auto-categorization, Settings for configuration. Let the background receiver catch new SMS automatically.</p>
+          <p>Use the unified 3-tab interface: Home for transactions & date-range inbox scans, Rules for smart automations & merchant detection, and Settings for configuration. The background receiver catches new SMS automatically.</p>
         </div>
       </div>
     </div>
@@ -320,10 +320,15 @@
           <h4>v0.0.5-alpha — Bi-Directional Sync</h4>
           <p>Bi-directional sync logic, updating sent transactions, UI uncluttering.</p>
         </div>
+        <div class="roadmap-item done">
+          <span class="roadmap-tag done">🚀 Released</span>
+          <h4>v0.1.0-beta — Public Beta Release</h4>
+          <p>Modern Bottom Sheet Rule Editor, Detected Vendors directory, Budget assignment in rules, Live SMS Room account matching fixes, template live preview, and active community support readiness.</p>
+        </div>
         <div class="roadmap-item">
           <span class="roadmap-tag current">🔥 In Progress</span>
-          <h4>v1.0 — Stable Release + Signed APK</h4>
-          <p>Production-quality signed APK, better error handling, comprehensive bank format coverage.</p>
+          <h4>v1.0 — General Availability</h4>
+          <p>Production release on Google Play & F-Droid, extended international bank format coverage, and widget enhancements.</p>
         </div>
         <div class="roadmap-item">
           <span class="roadmap-tag upcoming">🔮 Planned</span>
@@ -421,11 +426,15 @@
           </div>
         </div>
         <div class="faq-item">
-          <button class="faq-question">How can I contribute?</button>
+          <button class="faq-question">Is the app ready for daily use? (Public Beta status)</button>
           <div class="faq-answer">
-            <p>The most impactful contribution is adding new bank SMS patterns. You can also fix bugs, improve UI, add
-              documentation, or suggest features. Check our CONTRIBUTING.md guide on GitHub for detailed instructions.
-            </p>
+            <p>Yes! We have launched the <strong>Public Beta (v0.1.0-beta)</strong>. The core flows—live SMS capture, smart rule automation with budget assignment, vendor discovery, Room database persistence, and bi-directional Firefly III sync—are stable for daily use. We actively support the app and welcome all bug reports and feature requests on GitHub!</p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question">How can I contribute or report bugs?</button>
+          <div class="faq-answer">
+            <p>The most impactful contribution is sharing bank SMS patterns or reporting bugs. You can also improve documentation, UI, or suggest features. Check our GitHub Issues and CONTRIBUTING.md guide for detailed instructions.</p>
           </div>
         </div>
       </div>
@@ -600,7 +609,7 @@
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
     "url": "https://github.com/swaraj429/firefly-3-sms-auto-scanner",
     "downloadUrl": "https://github.com/swaraj429/firefly-3-sms-auto-scanner/releases",
-    "softwareVersion": "0.0.5-alpha"
+    "softwareVersion": "0.1.0-beta"
   }
   </script>
 

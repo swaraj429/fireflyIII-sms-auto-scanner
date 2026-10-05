@@ -89,43 +89,64 @@ cd firefly-3-sms-auto-scanner
 ## Project Structure
 
 ```
-app/src/main/java/com/swaraj/fireflysmscanner/
+app/src/main/java/com/swaraj429/firefly3smsscanner/
+│
+├── db/                     # Room database persistence
+│   ├── FireflyDatabase     # SQLite Room Database definition
+│   ├── SmsRecordEntity     # Persisted SMS records and sync state
+│   └── SmsRecordDao        # DAO queries for deduplication, status, history
 │
 ├── model/                  # Pure data classes
 │   ├── ParsedTransaction   # Core transaction model with Firefly metadata fields
+│   ├── ParsingRule         # Automation rules (IF keyword THEN category, budget, account, template)
 │   ├── FireflyModels       # API request/response models
 │   └── SmsMessage          # Raw SMS data from ContentResolver
 │
-├── parser/
-│   └── SmsParser           # ← Most contributions go here (new bank patterns)
+├── parser/                 # SMS parsing and automation engine
+│   ├── SmsParser           # Core parser: amount regexes, debit/credit keywords
+│   ├── RuleEngine          # Rules evaluation & dynamic template interpolation
+│   ├── AccountMatcher      # Offline regex/keyword matching against Room cached accounts
+│   └── DescriptionExtractor# 15-tier merchant/vendor & payee extraction
 │
-├── sms/
+├── sms/                    # Device SMS inbox operations
 │   └── SmsReader           # ContentResolver queries; supports date range filtering
 │
-├── network/
-│   ├── FireflyApi          # Retrofit interface (categories, tags, budgets, accounts)
-│   └── RetrofitClient      # OkHttp + Retrofit builder with auth interceptor
+├── network/                # Retrofit & OkHttp networking
+│   ├── FireflyApi          # Retrofit interface (categories, tags, budgets, accounts, transactions)
+│   └── RetrofitClient      # OkHttp + Retrofit builder with auth interceptors
 │
-├── notification/
-│   ├── SmsReceiver         # BroadcastReceiver: SMS_RECEIVED + notification actions
-│   └── NotificationHelper  # Channel creation, notification builder
+├── notification/           # Real-time background detection
+│   ├── SmsReceiver         # BroadcastReceiver: SMS_RECEIVED + notification actions (Send/Dismiss)
+│   └── NotificationHelper  # Heads-up notification builder and result notifications
 │
-├── prefs/
-│   └── AppPrefs            # SharedPreferences wrapper
+├── sync/                   # Bi-directional sync
+│   └── FireflySyncEngine   # Reconciles local Room DB state with remote Firefly III instances
 │
-├── viewmodel/
-│   ├── SetupViewModel      # Connection testing
+├── prefs/                  # Configuration & preferences
+│   └── AppPrefs            # SharedPreferences wrapper for credentials and preferences
+│
+├── viewmodel/              # State management
+│   ├── SetupViewModel      # Connection diagnostics & setup state
 │   ├── SmsViewModel        # SMS loading, parsing, date range state
-│   ├── TransactionViewModel # Sending to Firefly III
-│   └── FireflyDataViewModel # Fetching/caching categories, tags, budgets, accounts
+│   ├── TransactionViewModel# Sending single or batch transactions to Firefly III
+│   ├── FireflyDataViewModel# Caching categories, tags, budgets, and asset accounts
+│   ├── RulesViewModel      # Managing custom automation rules
+│   ├── VendorsViewModel    # Aggregating detected merchants and one-tap rule creation
+│   ├── SmsHistoryViewModel # Room database SMS history & dismissal lifecycle
+│   └── SyncViewModel       # Bi-directional sync status and triggers
 │
-├── ui/
-│   ├── SetupScreen         # Configuration + live detection status
-│   ├── SmsListScreen       # Date range picker + SMS list
-│   ├── TransactionScreen   # Abacus-style editor cards
-│   └── DebugScreen         # In-app log viewer
+├── ui/                     # Jetpack Compose UI
+│   ├── screens/            # 3 Primary Screens
+│   │   ├── HomeScreen      # Unified dashboard: SMS scan, Room history, filter chips
+│   │   ├── RulesScreen     # Smart Rules tab + Detected Vendors directory tab
+│   │   └── SettingsScreen  # Connection configuration, sync controls, debug log viewer
+│   ├── sheets/             # Modal Bottom Sheets
+│   │   ├── TransactionEditorSheet # Abacus-style rich transaction editor
+│   │   ├── RuleEditorSheet        # Modern rule editor with live template preview & budget selection
+│   │   └── DismissReasonSheet     # Dismissal reason selection sheet
+│   └── theme/              # Material3 color schemes, typography, and styling
 │
-└── debug/
+└── debug/                  # Diagnostic utilities
     └── DebugLog            # Thread-safe singleton log (main-thread routed)
 ```
 
@@ -224,7 +245,7 @@ docs: add setup instructions for self-signed SSL certificates
 
 ## Adding Bank SMS Formats
 
-The SMS parser lives in `app/src/main/java/com/swaraj/fireflysmscanner/parser/SmsParser.kt`.
+The SMS parser lives in `app/src/main/java/com/swaraj429/firefly3smsscanner/parser/SmsParser.kt`.
 
 ### How the parser works
 

@@ -108,6 +108,28 @@ enum class SendStatus {
 }
 ```
 
+---
+
+### `ParsingRule`
+
+Represents an automation rule: IF SMS contains `keyword` THEN apply assigned metadata and execution directives. Persisted as JSON in SharedPreferences.
+
+```kotlin
+data class ParsingRule(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val keyword: String = "",                  // Substring to match in upper-cased SMS
+    val categoryName: String = "",              // Category to assign (first match wins)
+    val destinationAccountId: String? = null,   // Destination account ID
+    val destinationAccountName: String = "",    // Destination account name
+    val budgetId: String? = null,               // Firefly III budget ID (added in v0.1.0-beta)
+    val budgetName: String = "",                // Firefly III budget name
+    val tags: List<String> = emptyList(),       // Tags to merge into transaction
+    val isEnabled: Boolean = true,              // Whether the rule evaluates
+    val descriptionTemplate: String = "",       // Interpolated template (e.g. "{vendor} · ₹{amount}")
+    val autoSendToFirefly: Boolean = false      // Post immediately without review confirmation
+)
+```
+
 `SendStatus` drives the button label and action in `TransactionEditorSheet`:
 
 | Status | Button label | Action | Enabled? |

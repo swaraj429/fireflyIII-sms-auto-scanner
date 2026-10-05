@@ -114,23 +114,38 @@ The trade-off: `CopyOnWriteArrayList` has higher per-write cost than a plain `Ar
 
 `BroadcastReceiver.onReceive()` is called on the **main thread** with a **10-second deadline**.
 
-### For the incoming SMS handler
+### For the incoming SMS handler (v0.1.0-beta)
 
 ```kotlin
 private fun handleIncomingSms(context: Context, intent: Intent) {
-    // Runs on MAIN THREAD
+    // Initial verification runs on MAIN THREAD (< 1ms)
     val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
+    val rawSmsList = messages.mapNotNull { ... }
+    if (rawSmsList.isEmpty()) return
 
-    for (smsMessage in messages) {
-        // SmsParser.parse() is CPU-only (regex) — acceptable on main thread
-        // (takes < 1ms per message)
-        val transaction = SmsParser.parse(sms) ?: continue
+    // Offload to Dispatchers.IO via goAsync()
+    val pendingResult = goAsync()
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            // 1. Read cached accounts from Room DB asynchronously
+            val cachedAccounts = db.fireflyDao().getAccountsByType("asset")
+            val rules = loadRulesFromPrefs()
 
-        // NotificationHelper just builds objects and calls NotificationManager
-        // — all synchronous, no I/O, safe on main thread
-        NotificationHelper.showTransactionNotification(...)
+            for (raw in rawSmsList) {
+                val transaction = SmsParser.parse(sms) ?: continue
+                // 2. Local account matching (in-memory, no network)
+                AccountMatcher().findBestMatch(raw.body, cachedAccounts)
+                // 3. Automation rules evaluated LAST
+                RuleEngine.applyRules(transaction, rules)
+                // 4. Save record to Room DB
+                savePendingToDb(context, transaction)
+                // 5. Notify or auto-send
+                NotificationHelper.showTransactionNotification(...)
+            }
+        } finally {
+            pendingResult.finish() // Safely completes broadcast
+        }
     }
-    // Total time on main: < 5ms typical — well within 10s budget
 }
 ```
 
