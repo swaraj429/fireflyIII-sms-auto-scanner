@@ -1,16 +1,79 @@
-*.iml
-.gradle
-/local.properties
-/.idea
-.DS_Store
+# ==============================================================================
+# Git Ignore Configuration for Firefly III SMS Auto-Scanner
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Built Artifacts & Build Outputs
+# ------------------------------------------------------------------------------
+# Generated during compilation by Gradle and Android tools.
+# These contain compiled bytecode, dex files, and temporary outputs.
+# Ignored because they are large binaries, easily regenerated, and cause merge conflicts.
+build/
 /build
-/captures
-.externalNativeBuild
-.cxx
-local.properties
 /app/build
 /app/release/*
+
+# ------------------------------------------------------------------------------
+# 2. Local & Machine-Specific Configuration
+# ------------------------------------------------------------------------------
+# Contains machine-specific paths (e.g., sdk.dir=/home/swaraj/Android/Sdk).
+# Ignored because absolute paths differ between developers, operating systems, and CI runners.
+local.properties
+
+# ------------------------------------------------------------------------------
+# 3. Security & Release Signing Credentials
+# ------------------------------------------------------------------------------
+# CRITICAL SECURITY: Production keystores and credentials used to sign release APKs.
+# Ignored to prevent private signing keys and passwords from leaking to GitHub.
 *.jks
 *.keystore
 keystore.properties
+
+# ------------------------------------------------------------------------------
+# 4. Sensitive User Data & Private Test Imports
+# ------------------------------------------------------------------------------
+# Contains personal SMS messages, banking alerts, and test transaction exports.
+# Ignored to ensure private personal financial data is never exposed.
 sms_imports/
+
+# ------------------------------------------------------------------------------
+# 5. Gradle Daemon & User Home Caches
+# ------------------------------------------------------------------------------
+# Gradle internal execution history and incremental task cache.
+.gradle/
+.kotlin/
+/kotlin-profile/
+
+# Root-level caches created if Gradle is executed with GRADLE_USER_HOME set to workspace root
+/caches/
+/daemon/
+/jdks/
+/native/
+/wrapper/
+/android/
+
+# ------------------------------------------------------------------------------
+# 6. Android Profiler & Native Build Artifacts
+# ------------------------------------------------------------------------------
+# Memory/CPU profiler recordings and CMake/C++ NDK intermediate files.
+/captures/
+.externalNativeBuild/
+.cxx/
+
+# ------------------------------------------------------------------------------
+# 7. IDE & Editor Workspace Settings
+# ------------------------------------------------------------------------------
+# Developer-specific IDE caches, project shelves, and window states.
+*.iml
+/.idea/
+.vscode/
+
+# ------------------------------------------------------------------------------
+# 8. Operating System & Editor Scratch Files
+# ------------------------------------------------------------------------------
+# System metadata and temporary backup files.
+.DS_Store
+Thumbs.db
+*.swp
+*~
+*.log

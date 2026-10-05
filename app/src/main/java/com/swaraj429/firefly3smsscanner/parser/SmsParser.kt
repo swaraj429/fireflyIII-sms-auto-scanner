@@ -109,6 +109,7 @@ object SmsParser {
         // 4. Extract sensible description (payee, merchant, or contextual bank detail)
         val isExpense = type == TransactionType.WITHDRAWAL
         val description = DescriptionExtractor.extractDescription(body, sms.sender, isExpense)
+        val vendor = DescriptionExtractor.extractVendor(body, sms.sender)
 
         // 5. Detect payment mode (UPI vs Card vs ATM vs NetBanking)
         val paymentMode = determinePaymentMode(body)
@@ -125,6 +126,7 @@ object SmsParser {
             timestamp = sms.timestamp,
             description = description,
             paymentMode = paymentMode,
+            vendor = vendor,
             selectedTags = tags
         )
     }

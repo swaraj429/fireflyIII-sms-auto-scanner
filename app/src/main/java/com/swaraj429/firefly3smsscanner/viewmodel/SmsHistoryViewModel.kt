@@ -68,14 +68,25 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
                     DebugLog.log(TAG, "Purged $deleted records older than $rangeDays days")
                 }
 
-                // 2. Fetch surviving records
+                // 2. Backfill vendors for records without one
+                val unmapped = dao.getRecordsWithoutVendor()
+                if (unmapped.isNotEmpty()) {
+                    for (rec in unmapped) {
+                        val detected = DescriptionExtractor.extractVendor(rec.body, rec.sender)
+                        if (!detected.isNullOrBlank()) {
+                            dao.updateVendor(rec.smsHash, detected)
+                        }
+                    }
+                }
+
+                // 3. Fetch surviving records
                 val records = dao.getRecordsSince(cutoff)
 
-                // 3. Convert to ParsedTransactions for UI
+                // 4. Convert to ParsedTransactions for UI
                 historyTransactions.clear()
                 historyTransactions.addAll(records.map { it.toParsedTransaction() })
 
-                // 4. Summary counts
+                // 5. Summary counts
                 pendingCount = records.count { it.syncStatus == "PENDING" }
                 sentCount = records.count { it.syncStatus == "SENT" }
                 failedCount = records.count { it.syncStatus == "FAILED" }
@@ -294,6 +305,7 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
             rawMessage = body,
             sender = sender,
             timestamp = smsTimestamp,
+            vendor = vendor ?: DescriptionExtractor.extractVendor(body, sender),
             description = cleanDesc,
             status = sendSt,
             sourceAccountId = sourceAccountId,
@@ -322,6 +334,7 @@ class SmsHistoryViewModel(application: Application) : AndroidViewModel(applicati
             smsTimestamp = timestamp,
             amount = effectiveAmount,
             transactionType = effectiveType.name,
+            vendor = vendor ?: DescriptionExtractor.extractVendor(rawMessage, sender),
             description = description,
             syncStatus = status.name,
             sourceAccountId = sourceAccountId,

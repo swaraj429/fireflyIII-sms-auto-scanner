@@ -10,6 +10,7 @@ import com.swaraj429.firefly3smsscanner.debug.DebugLog
 import com.swaraj429.firefly3smsscanner.model.DismissReason
 import com.swaraj429.firefly3smsscanner.model.FireflyAccount
 import com.swaraj429.firefly3smsscanner.model.ParsedTransaction
+import com.swaraj429.firefly3smsscanner.model.ParsingRule
 import com.swaraj429.firefly3smsscanner.model.SendStatus
 import com.swaraj429.firefly3smsscanner.model.SmsMessage
 import com.swaraj429.firefly3smsscanner.model.TransactionType
@@ -69,23 +70,24 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
      * Parse messages and optionally persist results to the SMS history DB.
      *
      * @param accounts  Firefly accounts for auto-matching
+     * @param rules     Smart rules for category, tags, and description templating
      * @param historyViewModel  when provided, parsed transactions are saved
      *                          to Room with hash-based dedup
      */
     fun parseMessages(
         accounts: List<FireflyAccount> = emptyList(),
+        rules: List<ParsingRule> = emptyList(),
         historyViewModel: SmsHistoryViewModel? = null
     ) {
-        DebugLog.log(TAG, "Parsing ${smsMessages.size} messages...")
+        DebugLog.log(TAG, "Parsing ${smsMessages.size} messages with ${rules.size} rules...")
 
         val results = SmsParser.parseAll(smsMessages)
         val matcher = AccountMatcher()
 
         results.forEach { txn ->
-            RuleEngine.applyRules(txn, emptyList())
+            // [1] Account matching first — detect source/destination from SMS content
             val match = matcher.findBestMatch(txn.rawMessage, accounts)
             if (match != null) {
-                // Determine source or destination based on transaction type
                 if (txn.effectiveType == TransactionType.WITHDRAWAL) {
                     txn.sourceAccountId = match.account.id
                     txn.sourceAccountName = match.account.name
@@ -94,6 +96,8 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
                     txn.destinationAccountName = match.account.name
                 }
             }
+            // [2] Rules run last — can override account, category, tags, description
+            RuleEngine.applyRules(txn, rules)
         }
 
         parsedTransactions.clear()
@@ -195,4 +199,35 @@ class SmsViewModel(application: Application) : AndroidViewModel(application) {
 
         historyViewModel?.restoreTransaction(transaction)
     }
+
+    /**
+     * Triggers batch auto-sending for all pending transactions that matched an autoSendToFirefly rule.
+     */
+    fun sendAutoSendTransactions(
+        transactionViewModel: TransactionViewModel,
+        historyViewModel: SmsHistoryViewModel? = null,
+        onComplete: (sentCount: Int) -> Unit = {}
+    ) {
+        val eligible = parsedTransactions.filter {
+            it.status == SendStatus.PENDING && it.autoSendToFirefly
+        }
+        if (eligible.isEmpty()) {
+            onComplete(0)
+            return
+        }
+
+        var sentCount = 0
+        var processedCount = 0
+
+        eligible.forEach { txn ->
+            transactionViewModel.sendTransaction(txn, historyViewModel) { success ->
+                processedCount++
+                if (success) sentCount++
+                if (processedCount == eligible.size) {
+                    onComplete(sentCount)
+                }
+            }
+        }
+    }
 }
+

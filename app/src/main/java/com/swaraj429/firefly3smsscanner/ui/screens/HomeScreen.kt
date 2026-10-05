@@ -353,6 +353,58 @@ fun HomeScreen(
 
         Spacer(Modifier.height(4.dp))
 
+        // ─── Auto-Send matched banner ───
+        val autoSendEligible = filtered.filter { it.status == SendStatus.PENDING && it.autoSendToFirefly }
+        if (autoSendEligible.isNotEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Primary.copy(alpha = 0.12f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Bolt, null, tint = Primary, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                "${autoSendEligible.size} Auto-Send Rule${if (autoSendEligible.size > 1) "s" else ""} Matched",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Primary
+                            )
+                            Text(
+                                "Ready to automatically submit to Firefly",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    FilledTonalButton(
+                        onClick = {
+                            smsViewModel.sendAutoSendTransactions(transactionViewModel, smsHistoryViewModel) { count ->
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Auto-sent $count transactions to Firefly!")
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Text("Send All (${autoSendEligible.size})", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+
         // ─── Bulk approve ───
         if (pendingCount > 1 && (selectedFilter == "All" || selectedFilter == "Pending")) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.End) {

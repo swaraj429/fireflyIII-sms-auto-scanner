@@ -106,6 +106,8 @@ object DescriptionExtractor {
     private val paytmPaidRegex1 = Regex("""Paid\s+(?:Rs\.?|INR)\s*[\d,.]+\s+to\s+([A-Za-z0-9 .\-_&]+?)(?:\s+at\s+[A-Za-z]{3}|\s+at\s+\d|\s*\.\s*Order)""", RegexOption.IGNORE_CASE)
     private val paytmTransferredRegex = Regex("""transferred\s+to\s+([A-Za-z0-9 .\-_&]+?)(?:\([0-9]+\))?\s+at\s+""", RegexOption.IGNORE_CASE)
     private val debitedTowardsRegex = Regex("""debited\s+towards\s+([A-Za-z0-9 .\-_&]+?)(?:\s+for\s+(?:Rs\.?|INR)|\.|\,|${'$'})""", RegexOption.IGNORE_CASE)
+    private val paidToRegex = Regex("""(?:paid|sent)\s+(?:Rs\.?|INR|₹)?\s*[\d,.]+\s+to\s+([A-Za-z0-9 .\-_&@]+?)(?:\s+from|\s+on|\s+ref|\s+using|\.|\,|${'$'})""", RegexOption.IGNORE_CASE)
+    private val sentToRegex = Regex("""sent\s+to\s+([A-Za-z0-9 .\-_&@]+?)(?:\s+from|\s+on|\s+ref|\s+using|\.|\,|${'$'})""", RegexOption.IGNORE_CASE)
     private val vpaCreditedRegex = Regex("""(?:credited\s+to|sent\s+to)\s+(?:VPA\s+)?([a-zA-Z0-9.\-_]+@[a-zA-Z0-9]+)""", RegexOption.IGNORE_CASE)
 
     private val transferToAccRegex = Regex("""credited\s+to\s+a/c\s*(?:no\.?)?\s*([X\d]+)""", RegexOption.IGNORE_CASE)
@@ -197,10 +199,13 @@ object DescriptionExtractor {
             return toTitleCase(plaza)
         }
 
-        // 9. Paytm payments
-        val paytmMatch = paytmPaidRegex1.find(body) ?: paytmTransferredRegex.find(body)
+        // 9. Paytm & general payments
+        val paytmMatch = paytmPaidRegex1.find(body) ?: paytmTransferredRegex.find(body) ?: paidToRegex.find(body) ?: sentToRegex.find(body)
         if (paytmMatch != null && paytmMatch.groupValues.size > 1) {
-            return cleanMerchantName(paytmMatch.groupValues[1])
+            val cand = paytmMatch.groupValues[1].trim()
+            if (!cand.startsWith("acct", ignoreCase = true) && !cand.startsWith("a/c", ignoreCase = true)) {
+                return cleanMerchantName(cand)
+            }
         }
 
         // 10. debited towards
@@ -289,6 +294,124 @@ object DescriptionExtractor {
         } else {
             "$bankName $action"
         }
+    }
+
+    /**
+     * Extracts a clean vendor / merchant / payee name from the SMS if present.
+     * Returns null if the transaction is a bank fallback, ATM withdrawal, inter-account transfer, etc.
+     */
+    fun extractVendor(body: String, sender: String): String? {
+        val lower = body.lowercase()
+
+        // Ignore non-vendor transactions immediately
+        if (lower.contains("at atm") || lower.contains("withdrawn from atm") ||
+            lower.contains("at adc") || lower.contains("upi lite wallet") ||
+            lower.contains("reversal of transaction") || lower.contains("reversed back") ||
+            lower.contains("payment received towards") || lower.contains("repayment was a success") ||
+            lower.contains("transfer to a/c") || lower.contains("transfer from a/c") ||
+            lower.contains("towards your sbi card") || lower.contains("towards your credit card")
+        ) {
+            return null
+        }
+
+        // 1. Axis multiline spend
+        val axisMatch = axisMultilineRegex1.find(body) ?: axisMultilineRegex2.find(body)
+        if (axisMatch != null && axisMatch.groupValues.size > 1) {
+            val merchant = axisMatch.groupValues[1].trim()
+            if (merchant.isNotBlank() && !merchant.startsWith("Avl", ignoreCase = true)) {
+                return cleanMerchantName(merchant)
+            }
+        }
+
+        // 2. Card spends at/on merchant
+        val cardMatch = cardSpendRegex1.find(body) ?: cardSpendRegex2.find(body) ?: sbiCardSpendRegex.find(body) ?: rblCardSpendRegex.find(body)
+        if (cardMatch != null && cardMatch.groupValues.size > 1) {
+            val raw = cardMatch.groupValues[1].trim()
+            if (raw.isNotBlank()) return cleanMerchantName(raw)
+        }
+        val emiCardMatch = emiCardSpendRegex.find(body)
+        if (emiCardMatch != null && emiCardMatch.groupValues.size > 1) {
+            return cleanMerchantName(emiCardMatch.groupValues[1])
+        }
+
+        // 3. Paid/Sent to merchant/payee
+        val paidMatch = paytmPaidRegex1.find(body) ?: paytmTransferredRegex.find(body) ?: paidToRegex.find(body) ?: sentToRegex.find(body)
+        if (paidMatch != null && paidMatch.groupValues.size > 1) {
+            val cand = paidMatch.groupValues[1].trim()
+            if (cand.isNotBlank() && !cand.startsWith("acct", ignoreCase = true) && !cand.startsWith("a/c", ignoreCase = true)) {
+                return cleanMerchantName(cand)
+            }
+        }
+
+        // 4. Debited payee pattern
+        val debitedMatch = debitedPayeeRegex.find(body)
+        if (debitedMatch != null && debitedMatch.groupValues.size > 1) {
+            val cand = debitedMatch.groupValues[1].trim()
+            if (!cand.startsWith("acct", ignoreCase = true) && !cand.startsWith("a/c", ignoreCase = true)) {
+                return cleanMerchantName(cand)
+            }
+        }
+
+        // 5. Credited payer pattern
+        val creditedMatch = creditedPayerRegex.find(body)
+        if (creditedMatch != null && creditedMatch.groupValues.size > 1) {
+            val cand = creditedMatch.groupValues[1].trim()
+            if (!cand.startsWith("acct", ignoreCase = true) && !cand.startsWith("a/c", ignoreCase = true)) {
+                return cleanMerchantName(cand)
+            }
+        }
+
+        // 6. Simpl
+        val simplMatch = simplChargedRegex.find(body)
+        if (simplMatch != null && simplMatch.groupValues.size > 1) {
+            return cleanMerchantName(simplMatch.groupValues[1])
+        }
+
+        // 7. NEFT / IMPS
+        val neftMatch = neftInfoRegex.find(body)
+        if (neftMatch != null && neftMatch.groupValues.size > 1) {
+            return cleanMerchantName(neftMatch.groupValues[1])
+        }
+
+        // 8. Toll
+        val tollMatch = tollPaidRegex.find(body)
+        if (tollMatch != null && tollMatch.groupValues.size > 1) {
+            var plaza = tollMatch.groupValues[1].trim()
+            if (!plaza.endsWith("toll", ignoreCase = true) && !plaza.endsWith("plaza", ignoreCase = true)) {
+                plaza += " Toll Plaza"
+            }
+            return toTitleCase(plaza)
+        }
+
+        // 9. Debited towards
+        val towardsMatch = debitedTowardsRegex.find(body)
+        if (towardsMatch != null && towardsMatch.groupValues.size > 1) {
+            return cleanMerchantName(towardsMatch.groupValues[1])
+        }
+
+        // 10. UPI VPA
+        val vpaMatch = vpaCreditedRegex.find(body)
+        if (vpaMatch != null && vpaMatch.groupValues.size > 1) {
+            val vpaDesc = cleanVpa(vpaMatch.groupValues[1].trim())
+            if (vpaDesc.isNotBlank() && !vpaDesc.startsWith("UPI ") && !vpaDesc.contains("@")) {
+                return vpaDesc
+            }
+        }
+
+        // 11. POS
+        if (lower.contains("at pos")) {
+            val posRegex = Regex("""at\s+pos\s+([A-Za-z0-9 .\-_&]+?)(?:\s+ref|\s+tid|\s+avl|\s+bal|\.|\,|${'$'})""", RegexOption.IGNORE_CASE)
+            val posMatch = posRegex.find(body)
+            if (posMatch != null && posMatch.groupValues[1].trim().length > 2) {
+                return cleanMerchantName(posMatch.groupValues[1].trim())
+            }
+        }
+
+        // 12. Telecom
+        if (sender.contains("AIRTEL", ignoreCase = true) || sender.contains("AIRBIL", ignoreCase = true)) return "Airtel"
+        if (sender.contains("JIOPAY", ignoreCase = true) || sender.contains("JIO", ignoreCase = true)) return "Jio"
+
+        return null
     }
 
     private fun cleanVpa(vpa: String): String {
