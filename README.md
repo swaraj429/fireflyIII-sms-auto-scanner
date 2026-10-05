@@ -23,14 +23,23 @@
 
 ## 📸 Screenshots
 
+<div align="center">
 
-| Setup Screen | SMS Scanner | Transaction Editor |
-|:---:|:---:|:---:|
-| <img src="docs/ScreenShots/Setup_screen.jpg" width="250" alt="Setup Screen"> | <img src="docs/ScreenShots/SMS_scanner.jpg" width="250" alt="SMS Scanner"> | <img src="docs/ScreenShots/Trasaction_editor.jpg" width="250" alt="Transaction Editor"> |
+### ⭐ Unified Dashboard & Transaction Stream
+*Real-time spend and income metrics, quick date-range filter chips, sync status pills, and live Firefly III decorator badges.*
 
-| Notification Alert | Send Result |
-|:---:|:---:|
-| <img src="docs/ScreenShots/Notification_alert.jpg" width="250" alt="Notification Alert"> | <img src="docs/ScreenShots/Send_result.jpg" width="250" alt="Send Result"> |
+<img src="docs/ScreenShots/SMS_scanner.jpg" width="340" alt="Firefly III SMS Scanner Unified Dashboard and Transaction Stream" style="border-radius: 18px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);">
+
+</div>
+
+<br>
+
+| ✏️ Transaction Editor | 🪄 Dynamic Rule Editor | 🏪 Automation & Vendors | ⚙️ Settings & Reconciliation | 🔔 Real-Time Alert |
+|:---:|:---:|:---:|:---:|:---:|
+| <img src="docs/ScreenShots/Trasaction_editor.jpg" width="200" alt="Transaction Editor Sheet with Firefly Update"> | <img src="docs/ScreenShots/Rule_editor.jpg" width="200" alt="Dynamic Rule Editor Sheet with Live Preview"> | <img src="docs/ScreenShots/Rules_screen.jpg" width="200" alt="Automation Rules & Detected Vendors Directory"> | <img src="docs/ScreenShots/Setup_screen.jpg" width="200" alt="Settings & Bi-Directional Firefly Sync"> | <img src="docs/ScreenShots/Notification_alert.jpg" width="200" alt="Real-time SMS Transaction Notification Alert"> |
+| **Transaction Editor**<br>In-app review, category & budget assignment, raw SMS inspection, and one-tap `PUT` update to Firefly. | **Rule Editor Sheet**<br>Dynamic description templates with variable chips (`{vendor}`, `{account}`), live preview card, and budget selector. | **Rules & Vendors**<br>Active automation rules with keyword/regex triggers and automated SMS inbox merchant discovery. | **Settings & True Sync**<br>Live detection status, server credential testing, and bi-directional reconciliation sync. | **Instant Notification**<br>Instant background detection alert with quick **Send to Firefly** and **Review** actions. |
+
+
 
 ## ✨ Features
 
