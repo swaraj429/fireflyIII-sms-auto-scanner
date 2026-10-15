@@ -36,6 +36,33 @@
             </intent-filter>
         </activity>
 
+        <!-- OAuth callback handler — receives redirect from Firefly III authorization -->
+        <activity
+            android:name=".auth.OAuthCallbackActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.FireflySmsScanner">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="firefly3sms"
+                    android:host="oauth"
+                    android:path="/callback" />
+            </intent-filter>
+            <!-- HTTPS Callback (accepted out-of-the-box by Firefly without server configuration changes) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="firefly3smsscanner.swaraj429.com"
+                    android:path="/oauth/callback" />
+            </intent-filter>
+        </activity>
+
         <!-- SMS BroadcastReceiver for live transaction detection -->
         <receiver
             android:name=".notification.SmsReceiver"

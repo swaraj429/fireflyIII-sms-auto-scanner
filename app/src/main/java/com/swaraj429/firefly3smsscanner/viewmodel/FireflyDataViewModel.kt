@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.swaraj429.firefly3smsscanner.auth.TokenStore
 import com.swaraj429.firefly3smsscanner.db.CachedAccount
 import com.swaraj429.firefly3smsscanner.db.CachedBudget
 import com.swaraj429.firefly3smsscanner.db.CachedCategory
@@ -28,6 +29,7 @@ import kotlinx.coroutines.launch
 class FireflyDataViewModel(application: Application) : AndroidViewModel(application) {
     private val TAG = "FireflyDataVM"
     private val prefs = AppPrefs(application)
+    private val tokenStore = TokenStore(application)
     private val dao = FireflyDatabase.getDatabase(application).fireflyDao()
 
     val categories = mutableStateListOf<FireflyCategory>()
@@ -81,8 +83,8 @@ class FireflyDataViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun refreshAll() {
-        if (!prefs.isConfigured) {
-            lastSyncStatus = "❌ Not configured — go to Setup"
+        if (!prefs.isConfigured || tokenStore.getActiveAccessToken().isBlank()) {
+            lastSyncStatus = "❌ Not configured — go to Settings"
             return
         }
 
@@ -92,7 +94,7 @@ class FireflyDataViewModel(application: Application) : AndroidViewModel(applicat
 
         viewModelScope.launch {
             try {
-                val api = RetrofitClient.create(prefs.baseUrl, prefs.accessToken)
+                val api = RetrofitClient.create(prefs.baseUrl, tokenStore)
 
                 fetchCategories(api)
                 fetchTags(api)

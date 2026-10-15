@@ -2,6 +2,7 @@ package com.swaraj429.firefly3smsscanner
 
 import android.app.Application
 import android.util.Log
+import com.swaraj429.firefly3smsscanner.auth.TokenMigration
 import com.swaraj429.firefly3smsscanner.debug.DebugLog
 import com.swaraj429.firefly3smsscanner.notification.NotificationHelper
 
@@ -14,5 +15,8 @@ class FireflyApp : Application() {
         // Create notification channel once at startup (safe to call repeatedly)
         NotificationHelper.createChannel(this)
         DebugLog.log("APP", "Notification channel registered")
+
+        // Migrate any pre-existing PAT tokens to encrypted TokenStore
+        TokenMigration.migrateIfNeeded(this)
     }
 }

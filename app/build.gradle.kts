@@ -115,6 +115,10 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
+    // Browser (Chrome Custom Tabs) & Security (EncryptedSharedPreferences)
+    implementation("androidx.browser:browser:1.7.0")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
 }

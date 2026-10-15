@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
     // Holds a pending transaction from a notification tap.
     // Written on the main thread from onCreate/onNewIntent, read in Compose.
     private val pendingNotificationTransaction = mutableStateOf<ParsedTransaction?>(null)
+    private val oauthSuccessEvent = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +54,7 @@ class MainActivity : ComponentActivity() {
 
         // Handle notification tap intent that launched the activity
         handleNotificationIntent(intent)
+        handleOAuthIntent(intent)
 
         setContent {
             FireflyTheme {
@@ -61,7 +63,8 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     MainApp(
-                        pendingNotificationTransaction = pendingNotificationTransaction
+                        pendingNotificationTransaction = pendingNotificationTransaction,
+                        oauthSuccessEvent = oauthSuccessEvent
                     )
                 }
             }
@@ -72,6 +75,14 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleNotificationIntent(intent)
+        handleOAuthIntent(intent)
+    }
+
+    private fun handleOAuthIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra("oauth_success", false) == true) {
+            DebugLog.log("MainActivity", "OAuth success intent received")
+            oauthSuccessEvent.value = true
+        }
     }
 
     private fun handleNotificationIntent(intent: Intent?) {
@@ -128,7 +139,8 @@ sealed class Screen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainApp(
-    pendingNotificationTransaction: MutableState<ParsedTransaction?> = mutableStateOf(null)
+    pendingNotificationTransaction: MutableState<ParsedTransaction?> = mutableStateOf(null),
+    oauthSuccessEvent: MutableState<Boolean> = mutableStateOf(false)
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -256,6 +268,18 @@ fun MainApp(
             popUpTo(navController.graph.startDestinationId) { saveState = true }
             launchSingleTop = true
             restoreState = true
+        }
+    }
+
+    // ── Handle OAuth return ──────────────────────────────────────────────────
+    LaunchedEffect(oauthSuccessEvent.value) {
+        if (oauthSuccessEvent.value) {
+            oauthSuccessEvent.value = false
+            setupViewModel.refreshOAuthStatus()
+            fireflyDataViewModel.refreshAll()
+            navController.navigate(Screen.Settings.route) {
+                launchSingleTop = true
+            }
         }
     }
     // ─────────────────────────────────────────────────────────────────────────

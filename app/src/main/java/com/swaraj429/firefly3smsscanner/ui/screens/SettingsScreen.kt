@@ -5,6 +5,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -55,7 +58,9 @@ fun SettingsScreen(
     syncViewModel: SyncViewModel = viewModel()
 ) {
     var showToken by remember { mutableStateOf(false) }
+    var showSecret by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
 
     val hasReceiveSms = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
@@ -79,6 +84,11 @@ fun SettingsScreen(
     var smsRecords by remember { mutableStateOf<List<SmsRecordEntity>>(emptyList()) }
 
     val db = remember { FireflyDatabase.getDatabase(context) }
+
+    // Refresh OAuth status on entry
+    LaunchedEffect(Unit) {
+        viewModel.refreshOAuthStatus()
+    }
 
     // Load DB stats when Debug section opens
     LaunchedEffect(showDebugSection) {
@@ -159,41 +169,262 @@ fun SettingsScreen(
         // ─── Connection Section ───
         item { SectionHeader("Connection") }
         item {
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+            Card(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
-                        value = viewModel.baseUrl, onValueChange = { viewModel.baseUrl = it },
-                        label = { Text("Server URL") }, placeholder = { Text("https://firefly.example.com") },
+                        value = viewModel.baseUrl,
+                        onValueChange = { viewModel.baseUrl = it },
+                        label = { Text("Server URL") },
+                        placeholder = { Text("https://firefly.example.com") },
                         leadingIcon = { Icon(Icons.Filled.Link, null, Modifier.size(20.dp)) },
-                        singleLine = true, shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                         modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(
-                        value = viewModel.accessToken, onValueChange = { viewModel.accessToken = it },
-                        label = { Text("Access Token") }, placeholder = { Text("eyJ0eX...") },
-                        leadingIcon = { Icon(Icons.Filled.Key, null, Modifier.size(20.dp)) },
-                        singleLine = true, shape = RoundedCornerShape(12.dp),
-                        visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { showToken = !showToken }) {
-                                Icon(if (showToken) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle")
+
+                    // Auth method toggle
+                    Text(
+                        "Authentication Method",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = viewModel.authMethod == "PAT",
+                            onClick = { viewModel.authMethod = "PAT" },
+                            label = { Text("Personal Token") },
+                            leadingIcon = {
+                                Icon(Icons.Filled.Key, null, Modifier.size(16.dp))
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = viewModel.authMethod == "OAUTH",
+                            onClick = { viewModel.authMethod = "OAUTH" },
+                            label = { Text("OAuth 2.0") },
+                            leadingIcon = {
+                                Icon(Icons.Filled.Security, null, Modifier.size(16.dp))
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    if (viewModel.authMethod == "PAT") {
+                        OutlinedTextField(
+                            value = viewModel.accessToken,
+                            onValueChange = { viewModel.accessToken = it },
+                            label = { Text("Access Token") },
+                            placeholder = { Text("eyJ0eX...") },
+                            leadingIcon = { Icon(Icons.Filled.Key, null, Modifier.size(20.dp)) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { showToken = !showToken }) {
+                                    Icon(if (showToken) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle")
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        // OAuth 2.0 Section
+                        OutlinedTextField(
+                            value = viewModel.oauthClientId,
+                            onValueChange = { viewModel.oauthClientId = it },
+                            label = { Text("Client ID") },
+                            placeholder = { Text("e.g. 1") },
+                            leadingIcon = { Icon(Icons.Filled.Badge, null, Modifier.size(20.dp)) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { viewModel.isConfidentialClient = !viewModel.isConfidentialClient }
+                        ) {
+                            Checkbox(
+                                checked = viewModel.isConfidentialClient,
+                                onCheckedChange = { viewModel.isConfidentialClient = it }
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                "Confidential Client (uses Client Secret)",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+
+                        if (viewModel.isConfidentialClient) {
+                            OutlinedTextField(
+                                value = viewModel.oauthClientSecret,
+                                onValueChange = { viewModel.oauthClientSecret = it },
+                                label = { Text("Client Secret") },
+                                placeholder = { Text("Secret...") },
+                                leadingIcon = { Icon(Icons.Filled.Lock, null, Modifier.size(20.dp)) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                visualTransformation = if (showSecret) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { showSecret = !showSecret }) {
+                                        Icon(if (showSecret) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle")
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        // Callback URI Mode Selector
+                        Text(
+                            "OAuth Redirect URI",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = viewModel.redirectUriMode == "HTTPS",
+                                onClick = { viewModel.redirectUriMode = "HTTPS" },
+                                label = { Text("HTTPS (Standard)") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = viewModel.redirectUriMode == "CUSTOM",
+                                onClick = { viewModel.redirectUriMode = "CUSTOM" },
+                                label = { Text("App Scheme") },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        // Callback URI helper card
+                        val activeRedirectUri = viewModel.getEffectiveRedirectUri()
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            if (viewModel.redirectUriMode == "HTTPS") "Copy to Firefly OAuth Client (Default):" else "Custom Scheme Redirect URI:",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            activeRedirectUri,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        clipboardManager.setText(AnnotatedString(activeRedirectUri))
+                                        Toast.makeText(context, "Redirect URI copied!", Toast.LENGTH_SHORT).show()
+                                    }) {
+                                        Icon(Icons.Filled.ContentCopy, "Copy", Modifier.size(18.dp))
+                                    }
+                                }
+
+                                if (viewModel.redirectUriMode == "CUSTOM") {
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        "⚠️ Note: Firefly requires adding 'firefly3sms' in Administration > Configuration > 'Allowed URL schemes for OAuth redirects', otherwise it displays 'The redirect uris format is invalid'. Use HTTPS above to avoid server changes.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                        },
+                        }
+
+                        // Authorize & Disconnect buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(
+                                onClick = { viewModel.startOAuthFlow(context) },
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                            ) {
+                                Icon(Icons.Filled.Login, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Authorize", fontWeight = FontWeight.SemiBold)
+                            }
+                            if (viewModel.oauthStatus.contains("Connected")) {
+                                OutlinedButton(
+                                    onClick = { viewModel.disconnectOAuth() },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Disconnect", color = ErrorCrimson)
+                                }
+                            }
+                        }
+
+                        if (viewModel.oauthStatus.isNotBlank()) {
+                            Text(
+                                viewModel.oauthStatus,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (viewModel.oauthStatus.startsWith("✅")) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = viewModel.accountId,
+                        onValueChange = { viewModel.accountId = it },
+                        label = { Text("Default Account ID") },
+                        placeholder = { Text("1") },
+                        leadingIcon = { Icon(Icons.Filled.AccountBalance, null, Modifier.size(20.dp)) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth()
                     )
+
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            onClick = { viewModel.testConnection() }, enabled = !viewModel.isTesting,
-                            shape = RoundedCornerShape(12.dp), modifier = Modifier.weight(1f),
+                            onClick = { viewModel.testConnection() },
+                            enabled = !viewModel.isTesting,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(containerColor = Primary)
                         ) {
-                            if (viewModel.isTesting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = OnPrimary)
-                            else Icon(Icons.Filled.Wifi, null, Modifier.size(18.dp))
+                            if (viewModel.isTesting) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = OnPrimary)
+                            } else {
+                                Icon(Icons.Filled.Wifi, null, Modifier.size(18.dp))
+                            }
                             Spacer(Modifier.width(6.dp))
                             Text(if (viewModel.isTesting) "Testing..." else "Test", fontWeight = FontWeight.SemiBold)
                         }
-                        OutlinedButton(onClick = { viewModel.saveConfig() }, shape = RoundedCornerShape(12.dp), modifier = Modifier.weight(1f)) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.saveConfig()
+                                Toast.makeText(context, "Settings saved", Toast.LENGTH_SHORT).show()
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Icon(Icons.Filled.Save, null, Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Save", fontWeight = FontWeight.SemiBold)

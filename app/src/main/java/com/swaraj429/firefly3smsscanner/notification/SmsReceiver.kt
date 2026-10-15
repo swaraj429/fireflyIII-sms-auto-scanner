@@ -21,8 +21,9 @@ import com.swaraj429.firefly3smsscanner.model.ParsingRule
 import com.swaraj429.firefly3smsscanner.model.SendStatus
 import com.swaraj429.firefly3smsscanner.model.SmsMessage
 import com.swaraj429.firefly3smsscanner.model.TransactionType
-import com.swaraj429.firefly3smsscanner.network.RetrofitClient
 import com.swaraj429.firefly3smsscanner.model.FireflyAccount
+import com.swaraj429.firefly3smsscanner.network.RetrofitClient
+import com.swaraj429.firefly3smsscanner.auth.TokenStore
 import com.swaraj429.firefly3smsscanner.parser.AccountMatcher
 import com.swaraj429.firefly3smsscanner.parser.RuleEngine
 import com.swaraj429.firefly3smsscanner.parser.SmsParser
@@ -227,7 +228,8 @@ class SmsReceiver : BroadcastReceiver() {
             )
 
             try {
-                val api = RetrofitClient.create(prefs.baseUrl, prefs.accessToken)
+                val tokenStore = TokenStore(context)
+                val api = RetrofitClient.create(prefs.baseUrl, tokenStore)
                 val dateStr = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
                     .format(Date(transaction.timestamp))
                 val fireflyType = transaction.effectiveType.toFireflyType()
@@ -360,7 +362,8 @@ class SmsReceiver : BroadcastReceiver() {
             )
 
             try {
-                val api = RetrofitClient.create(prefs.baseUrl, prefs.accessToken)
+                val tokenStore = TokenStore(context)
+                val api = RetrofitClient.create(prefs.baseUrl, tokenStore)
                 val dateStr = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
                     .format(Date(timestamp))
                 val fireflyType = type.toFireflyType()

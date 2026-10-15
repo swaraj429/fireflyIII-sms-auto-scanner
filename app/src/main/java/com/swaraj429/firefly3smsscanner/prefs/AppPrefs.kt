@@ -5,7 +5,7 @@ import android.content.SharedPreferences
 import com.swaraj429.firefly3smsscanner.debug.DebugLog
 
 /**
- * Simple SharedPreferences wrapper for app config.
+ * Simple SharedPreferences wrapper for app config and UI preferences.
  */
 class AppPrefs(context: Context) {
     private val prefs: SharedPreferences =
@@ -32,6 +32,20 @@ class AppPrefs(context: Context) {
             DebugLog.log("PREFS", "Account ID saved: $value")
         }
 
+    var authMethod: String
+        get() = prefs.getString("auth_method", "PAT") ?: "PAT"
+        set(value) {
+            prefs.edit().putString("auth_method", value).apply()
+            DebugLog.log("PREFS", "Auth method saved: $value")
+        }
+
+    var oauthClientId: String
+        get() = prefs.getString("oauth_client_id", "") ?: ""
+        set(value) {
+            prefs.edit().putString("oauth_client_id", value.trim()).apply()
+            DebugLog.log("PREFS", "OAuth Client ID saved: $value")
+        }
+
     /** How many days of history to retain and reconcile. Default 30, user-configurable. */
     var syncRangeDays: Int
         get() = prefs.getInt("sync_range_days", 30)
@@ -41,7 +55,10 @@ class AppPrefs(context: Context) {
         }
 
     val isConfigured: Boolean
-        get() = baseUrl.isNotBlank() && accessToken.isNotBlank()
+        get() = baseUrl.isNotBlank() && when (authMethod) {
+            "OAUTH" -> true
+            else -> accessToken.isNotBlank()
+        }
 
     fun clear() {
         prefs.edit().clear().apply()

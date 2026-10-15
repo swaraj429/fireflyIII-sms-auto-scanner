@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.swaraj429.firefly3smsscanner.auth.TokenStore
 import com.swaraj429.firefly3smsscanner.debug.DebugLog
 import com.swaraj429.firefly3smsscanner.model.*
 import com.swaraj429.firefly3smsscanner.network.RetrofitClient
@@ -19,6 +20,7 @@ import java.util.*
 class TransactionViewModel(application: Application) : AndroidViewModel(application) {
     private val TAG = "TransactionVM"
     private val prefs = AppPrefs(application)
+    private val tokenStore = TokenStore(application)
 
     var lastResult by mutableStateOf("")
 
@@ -34,8 +36,8 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
         historyViewModel: SmsHistoryViewModel? = null,
         onComplete: (Boolean) -> Unit
     ) {
-        if (!prefs.isConfigured) {
-            lastResult = "❌ Firefly not configured — go to Setup"
+        if (!prefs.isConfigured || tokenStore.getActiveAccessToken().isBlank()) {
+            lastResult = "❌ Firefly not configured — go to Settings"
             DebugLog.log(TAG, "Cannot send — not configured")
             onComplete(false)
             return
@@ -46,7 +48,7 @@ class TransactionViewModel(application: Application) : AndroidViewModel(applicat
 
         viewModelScope.launch {
             try {
-                val api = RetrofitClient.create(prefs.baseUrl, prefs.accessToken)
+                val api = RetrofitClient.create(prefs.baseUrl, tokenStore)
                 val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
                 val dateStr = dateFormat.format(Date(transaction.timestamp))
 
