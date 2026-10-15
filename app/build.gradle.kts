@@ -1,5 +1,23 @@
 import java.util.Properties
 import java.io.FileInputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+fun getGitCommitHash(): String {
+    return try {
+        val process = ProcessBuilder("git", "rev-parse", "--short=6", "HEAD").start()
+        val hash = process.inputStream.bufferedReader().readText().trim()
+        process.waitFor()
+        if (hash.isNotEmpty() && !hash.startsWith("fatal")) hash.take(6) else "nohash"
+    } catch (_: Exception) {
+        "nohash"
+    }
+}
+
+fun getBuildTimestamp(): String {
+    return SimpleDateFormat("yyMMddHHmm", Locale.US).format(Date())
+}
 
 plugins {
     id("com.android.application")
@@ -13,6 +31,11 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+val currentGitHash = getGitCommitHash()
+val currentBuildTimestamp = getBuildTimestamp()
+val appVersionName = "0.1.1-beta"
+val buildUniqueId = "${appVersionName}_${currentGitHash}_${currentBuildTimestamp}"
+
 android {
     namespace = "com.swaraj429.firefly3smsscanner"
     compileSdk = 34
@@ -21,8 +44,12 @@ android {
         applicationId = "com.swaraj429.firefly3smsscanner"
         minSdk = 26
         targetSdk = 34
-        versionCode = 6
-        versionName = "0.1.0-beta"
+        versionCode = 7
+        versionName = appVersionName
+
+        buildConfigField("String", "BUILD_UNIQUE_ID", "\"$buildUniqueId\"")
+        buildConfigField("String", "GIT_COMMIT_HASH", "\"$currentGitHash\"")
+        buildConfigField("String", "BUILD_TIMESTAMP", "\"$currentBuildTimestamp\"")
     }
 
     signingConfigs {
